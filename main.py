@@ -13,7 +13,7 @@ def main():
     parser = argparse.ArgumentParser(description='Parameter Processing')
     parser.add_argument('--dataset', type=str, default='CIFAR10', help='dataset')
     parser.add_argument('--model', type=str, default='ConvNet', help='model')
-    parser.add_argument('--ipc', type=int, default=50, help='image(s) per class')
+    parser.add_argument('--ipc', type=int, default=30, help='image(s) per class')
     parser.add_argument('--eval_mode', type=str, default='SS', help='eval_mode') # S: the same to training model, M: multi architectures,  W: net width, D: net depth, A: activation function, P: pooling layer, N: normalization layer,
     parser.add_argument('--num_exp', type=int, default=1, help='the number of experiments')
     parser.add_argument('--num_eval', type=int, default=20, help='the number of evaluating randomly initialized models')
@@ -129,15 +129,20 @@ def main():
                     start_index = i * batch_size
                     end_index = (i + 1) * batch_size
 
-                    # 取出当前batch的数据(features)
+                    # P1 拿出一个 batch 的数据（特征），embed得到输出
                     img_real = images_all[start_index: end_index]
+
+
                     if args.dsa:
                         seed = int(time.time() * 1000) % 100000
                         img_real = DiffAugment(img_real, args.dsa_strategy, seed=seed, param=args.dsa_param)
                         img_syn = DiffAugment(img_syn, args.dsa_strategy, seed=seed, param=args.dsa_param)
 
                     output_real = embed(img_real).detach()
+
+                    # 得到一个batch的输出之后，将输出传递给P0，P0计算batch中每一个类的输出
                     output_syn = embed(img_syn)
+
 
                     loss += torch.sum((torch.mean(output_real, dim=0) - torch.mean(output_syn, dim=0))**2)
 
