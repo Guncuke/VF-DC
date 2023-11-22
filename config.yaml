@@ -1,5 +1,0 @@
----
-dataset: mnist
-model: resnet18
-
-...
