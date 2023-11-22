@@ -8,10 +8,23 @@ from torchvision.utils import save_image
 from utils import get_loops, get_dataset, get_network, get_eval_pool, evaluate_synset, get_daparam, match_loss, get_time, TensorDataset, epoch, DiffAugment, ParamDiffAug
 
 
+class FeatureHolder:
+    """feature holder"""
+    def __init__(self, features, syn_images, syn_labels):
+        self.features = features
+        self.syn_images = syn_images
+        self.syn_labels = syn_labels
+
+class LabelHolder:
+    """labels holder"""
+    def __init__(self, labels):
+        self.labels= labels
+
+
 def main():
 
     parser = argparse.ArgumentParser(description='Parameter Processing')
-    parser.add_argument('--dataset', type=str, default='CIFAR10', help='dataset')
+    parser.add_argument('--dataset', type=str, default='MNIST', help='dataset')
     parser.add_argument('--model', type=str, default='ConvNet', help='model')
     parser.add_argument('--ipc', type=int, default=30, help='image(s) per class')
     parser.add_argument('--eval_mode', type=str, default='SS', help='eval_mode') # S: the same to training model, M: multi architectures,  W: net width, D: net depth, A: activation function, P: pooling layer, N: normalization layer,
@@ -63,15 +76,15 @@ def main():
         images_all = [torch.unsqueeze(dst_train[i][0], dim=0) for i in range(len(dst_train))]
         labels_all = [dst_train[i][1] for i in range(len(dst_train))]
 
-        # P1: images_all
         images_all = torch.cat(images_all, dim=0).to(args.device)
-        # P0: labels_all
         labels_all = torch.tensor(labels_all, dtype=torch.long, device=args.device)
 
         ''' initialize the synthetic data '''
         image_syn = torch.randn(size=(num_classes*args.ipc, channel, im_size[0], im_size[1]), dtype=torch.float, requires_grad=True, device=args.device)
         label_syn = torch.tensor([np.ones(args.ipc)*i for i in range(num_classes)], dtype=torch.long, requires_grad=False, device=args.device).view(-1) # [0,0,0, 1,1,1, ..., 9,9,9]
-
+        # p1持有特征和生成数据集，p0持有标签
+        p1 = FeatureHolder(images_all, image_syn, label_syn)
+        p0 = LabelHolder(labels_all)
         ''' training '''
         optimizer_img = torch.optim.SGD([image_syn, ], lr=args.lr_img, momentum=0.5) # optimizer_img for synthetic data
         optimizer_img.zero_grad()
@@ -80,7 +93,7 @@ def main():
         for it in range(args.Iteration+1):
 
             ''' Evaluate synthetic data '''
-            if it in eval_it_pool:
+            if it in eval_it_pool[1:]:
                 for model_eval in model_eval_pool:
                     print('-------------------------\nEvaluation\nmodel_train = %s, model_eval = %s, iteration = %d'%(args.model, model_eval, it))
 
@@ -132,16 +145,18 @@ def main():
                     # P1 拿出一个 batch 的数据（特征），embed得到输出
                     img_real = images_all[start_index: end_index]
 
-
                     if args.dsa:
                         seed = int(time.time() * 1000) % 100000
                         img_real = DiffAugment(img_real, args.dsa_strategy, seed=seed, param=args.dsa_param)
-                        img_syn = DiffAugment(img_syn, args.dsa_strategy, seed=seed, param=args.dsa_param)
+                        # img_syn = DiffAugment(img_syn, args.dsa_strategy, seed=seed, param=args.dsa_param)
 
+                    # shape: [batch_size, embd_output]
                     output_real = embed(img_real).detach()
 
-                    # 得到一个batch的输出之后，将输出传递给P0，P0计算batch中每一个类的输出
-                    output_syn = embed(img_syn)
+                    # TODO: p0挑出每一个类的output_real
+
+
+                    # output_syn = embed(img_syn)
 
 
                     loss += torch.sum((torch.mean(output_real, dim=0) - torch.mean(output_syn, dim=0))**2)
