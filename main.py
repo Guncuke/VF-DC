@@ -16,11 +16,13 @@ def main():
     parser.add_argument('--ipc', type=int, default=30, help='image(s) per class')
     parser.add_argument('--eval_mode', type=str, default='SS', help='eval_mode') # S: the same to training model, M: multi architectures,  W: net width, D: net depth, A: activation function, P: pooling layer, N: normalization layer,
     parser.add_argument('--num_exp', type=int, default=1, help='the number of experiments')
-    parser.add_argument('--num_eval', type=int, default=20, help='the number of evaluating randomly initialized models')
+    parser.add_argument('--num_eval', type=int, default=10, help='the number of evaluating randomly initialized models')
     parser.add_argument('--epoch_eval_train', type=int, default=1000, help='epochs to train a model with synthetic data') # it can be small for speeding up with little performance drop
     parser.add_argument('--Iteration', type=int, default=20000, help='training iterations')
     parser.add_argument('--lr_img', type=float, default=1.0, help='learning rate for updating synthetic images')
-    parser.add_argument('--batch_real', type=int, default=256, help='batch size for real data')
+    parser.add_argument('--lr_net', type=float, default=0.01, help='learning rate for updating network parameters')
+    parser.add_argument('--batch_real', type=int, default=2560, help='batch size for real data')
+    parser.add_argument('--batch_train', type=int, default=256, help='batch size for training networks')
     parser.add_argument('--dsa_strategy', type=str, default='color_crop_cutout_flip_scale_rotate', help='differentiable Siamese augmentation strategy')
     parser.add_argument('--data_path', type=str, default='data', help='dataset path')
     parser.add_argument('--save_path', type=str, default='result', help='path to save results')
@@ -77,7 +79,7 @@ def main():
         for it in range(args.Iteration+1):
 
             ''' Evaluate synthetic data '''
-            if it in eval_it_pool[1:]:
+            if it in eval_it_pool:
                 for model_eval in model_eval_pool:
                     print('-------------------------\nEvaluation\nmodel_train = %s, model_eval = %s, iteration = %d'%(args.model, model_eval, it))
 
@@ -120,7 +122,7 @@ def main():
             ''' update synthetic data '''
             if 'BN' not in args.model: # for ConvNet
                 loss = torch.tensor(0.0).to(args.device)
-                batch_size = 256 * 10
+                batch_size = args.batch_real
                 for i in range(len(images_all) // batch_size):
 
                     start_index = i * batch_size
@@ -166,29 +168,53 @@ def main():
                         loss += torch.sum((real_mean - output_syn_mean)**2)
 
             else: # for ConvNetBN
+                loss = torch.tensor(0.0).to(args.device)
+                batch_size = args.batch_real
                 images_real_all = []
                 images_syn_all = []
-                loss = torch.tensor(0.0).to(args.device)
-                for c in range(num_classes):
-                    img_real = get_images(c, args.batch_real)
-                    img_syn = image_syn[c*args.ipc:(c+1)*args.ipc].reshape((args.ipc, channel, im_size[0], im_size[1]))
+                for i in range(len(images_all) // batch_size):
+
+                    start_index = i * batch_size
+                    end_index = (i + 1) * batch_size
+
+                    # P1 拿出一个 batch 的数据（特征），embed得到输出
+                    img_real = images_all[start_index: end_index]
 
                     if args.dsa:
                         seed = int(time.time() * 1000) % 100000
                         img_real = DiffAugment(img_real, args.dsa_strategy, seed=seed, param=args.dsa_param)
-                        img_syn = DiffAugment(img_syn, args.dsa_strategy, seed=seed, param=args.dsa_param)
+                        # img_syn = DiffAugment(img_syn, args.dsa_strategy, seed=seed, param=args.dsa_param)
 
-                    images_real_all.append(img_real)
-                    images_syn_all.append(img_syn)
+                    output_real = embed(img_real).detach()
 
-                images_real_all = torch.cat(images_real_all, dim=0)
-                images_syn_all = torch.cat(images_syn_all, dim=0)
+                    # p0返回每一个类的掩码
+                    label_real = labels_all[start_index: end_index]
+                    mask = torch.zeros((num_classes, batch_size), dtype=torch.bool)
+                    for index, label in enumerate(label_real):
+                        label = label.to('cpu')
+                        mask[label][index] = True
 
-                output_real = embed(images_real_all).detach()
-                output_syn = embed(images_syn_all)
+                    # TODO: encrypted & noise
+                    output_real_classes = []
+                    output_real_classes_mean = []
+                    for j in range(num_classes):
+                        output_real_class = output_real[mask[j]]
+                        output_real_class_mean = torch.mean(output_real_class, dim=0)
+                        output_real_classes.append(output_real_class)
+                        output_real_classes_mean.append(output_real_class_mean)
 
-                loss += torch.sum((torch.mean(output_real.reshape(num_classes, args.batch_real, -1), dim=1) - torch.mean(output_syn.reshape(num_classes, args.ipc, -1), dim=1))**2)
+                    # P1获得了每一个类的emdb mean输出，更新浓缩数据集
+                    for c, real_mean in enumerate(output_real_classes_mean):
+                        img_syn = image_syn[c * args.ipc:(c + 1) * args.ipc].reshape(
+                            (args.ipc, channel, im_size[0], im_size[1]))
 
+                        if args.dsa:
+                            img_syn = DiffAugment(img_syn, args.dsa_strategy, seed=seed, param=args.dsa_param)
+
+                        output_syn = embed(img_syn)
+                        output_syn_mean = torch.mean(output_syn, dim=0)
+
+                        loss += torch.sum((real_mean - output_syn_mean) ** 2)
 
 
             optimizer_img.zero_grad()
