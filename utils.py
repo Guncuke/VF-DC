@@ -527,30 +527,30 @@ def rand_scale(x, param):
     # sx, sy: (0, +oo), 1: orignial size, 0.5: enlarge 2 times
     ratio = param.ratio_scale
     set_seed_DiffAug(param)
-    sx = torch.rand(x.shape[0]) * (ratio - 1.0/ratio) + 1.0/ratio
+    sx = torch.rand(x.shape[0]) * (ratio - 1.0 / ratio) + 1.0 / ratio
     set_seed_DiffAug(param)
-    sy = torch.rand(x.shape[0]) * (ratio - 1.0/ratio) + 1.0/ratio
-    theta = [[[sx[i], 0,  0],
-            [0,  sy[i], 0],] for i in range(x.shape[0])]
+    sy = torch.rand(x.shape[0]) * (ratio - 1.0 / ratio) + 1.0 / ratio
+    theta = [[[sx[i], 0, 0],
+              [0, sy[i], 0], ] for i in range(x.shape[0])]
     theta = torch.tensor(theta, dtype=torch.float)
-    if param.Siamese: # Siamese augmentation:
+    if param.Siamese:  # Siamese augmentation:
         theta[:] = theta[0]
-    grid = F.affine_grid(theta, x.shape).to(x.device)
-    x = F.grid_sample(x, grid)
+    grid = F.affine_grid(theta, x.shape, align_corners=False).to(x.device)
+    x = F.grid_sample(x, grid, align_corners=False)
     return x
 
 
-def rand_rotate(x, param): # [-180, 180], 90: anticlockwise 90 degree
+def rand_rotate(x, param):  # [-180, 180], 90: anticlockwise 90 degree
     ratio = param.ratio_rotate
     set_seed_DiffAug(param)
     theta = (torch.rand(x.shape[0]) - 0.5) * 2 * ratio / 180 * float(np.pi)
     theta = [[[torch.cos(theta[i]), torch.sin(-theta[i]), 0],
-        [torch.sin(theta[i]), torch.cos(theta[i]),  0],]  for i in range(x.shape[0])]
+              [torch.sin(theta[i]), torch.cos(theta[i]), 0], ] for i in range(x.shape[0])]
     theta = torch.tensor(theta, dtype=torch.float)
-    if param.Siamese: # Siamese augmentation:
+    if param.Siamese:  # Siamese augmentation:
         theta[:] = theta[0]
-    grid = F.affine_grid(theta, x.shape).to(x.device)
-    x = F.grid_sample(x, grid)
+    grid = F.affine_grid(theta, x.shape, align_corners=False).to(x.device)
+    x = F.grid_sample(x, grid, align_corners=False)
     return x
 
 
@@ -558,7 +558,7 @@ def rand_flip(x, param):
     prob = param.prob_flip
     set_seed_DiffAug(param)
     randf = torch.rand(x.size(0), 1, 1, 1, device=x.device)
-    if param.Siamese: # Siamese augmentation:
+    if param.Siamese:  # Siamese augmentation:
         randf[:] = randf[0]
     return torch.where(randf < prob, x.flip(3), x)
 
@@ -569,7 +569,7 @@ def rand_brightness(x, param):
     randb = torch.rand(x.size(0), 1, 1, 1, dtype=x.dtype, device=x.device)
     if param.Siamese:  # Siamese augmentation:
         randb[:] = randb[0]
-    x = x + (randb - 0.5)*ratio
+    x = x + (randb - 0.5) * ratio
     return x
 
 
@@ -610,6 +610,7 @@ def rand_crop(x, param):
         torch.arange(x.size(0), dtype=torch.long, device=x.device),
         torch.arange(x.size(2), dtype=torch.long, device=x.device),
         torch.arange(x.size(3), dtype=torch.long, device=x.device),
+        indexing='ij'
     )
     grid_x = torch.clamp(grid_x + translation_x + 1, 0, x.size(2) + 1)
     grid_y = torch.clamp(grid_y + translation_y + 1, 0, x.size(3) + 1)
@@ -632,6 +633,7 @@ def rand_cutout(x, param):
         torch.arange(x.size(0), dtype=torch.long, device=x.device),
         torch.arange(cutout_size[0], dtype=torch.long, device=x.device),
         torch.arange(cutout_size[1], dtype=torch.long, device=x.device),
+        indexing='ij'
     )
     grid_x = torch.clamp(grid_x + offset_x - cutout_size[0] // 2, min=0, max=x.size(2) - 1)
     grid_y = torch.clamp(grid_y + offset_y - cutout_size[1] // 2, min=0, max=x.size(3) - 1)

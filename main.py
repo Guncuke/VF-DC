@@ -8,19 +8,6 @@ from torchvision.utils import save_image
 from utils import get_loops, get_dataset, get_network, get_eval_pool, evaluate_synset, get_daparam, match_loss, get_time, TensorDataset, epoch, DiffAugment, ParamDiffAug
 
 
-class FeatureHolder:
-    """feature holder"""
-    def __init__(self, features, syn_images, syn_labels):
-        self.features = features
-        self.syn_images = syn_images
-        self.syn_labels = syn_labels
-
-class LabelHolder:
-    """labels holder"""
-    def __init__(self, labels):
-        self.labels= labels
-
-
 def main():
 
     parser = argparse.ArgumentParser(description='Parameter Processing')
@@ -70,9 +57,6 @@ def main():
         print('Evaluation model pool: ', model_eval_pool)
 
         ''' organize the real dataset '''
-        images_all = []
-        labels_all = []
-
         images_all = [torch.unsqueeze(dst_train[i][0], dim=0) for i in range(len(dst_train))]
         labels_all = [dst_train[i][1] for i in range(len(dst_train))]
 
@@ -81,10 +65,10 @@ def main():
 
         ''' initialize the synthetic data '''
         image_syn = torch.randn(size=(num_classes*args.ipc, channel, im_size[0], im_size[1]), dtype=torch.float, requires_grad=True, device=args.device)
-        label_syn = torch.tensor([np.ones(args.ipc)*i for i in range(num_classes)], dtype=torch.long, requires_grad=False, device=args.device).view(-1) # [0,0,0, 1,1,1, ..., 9,9,9]
-        # p1持有特征和生成数据集，p0持有标签
-        p1 = FeatureHolder(images_all, image_syn, label_syn)
-        p0 = LabelHolder(labels_all)
+        label_syn = torch.tensor(np.concatenate([np.ones(args.ipc, dtype=np.int64) * i for i in range(num_classes)]),
+                                 dtype=torch.long, requires_grad=False, device=args.device).view(
+            -1)  # [0,0,0, 1,1,1, ..., 9,9,9]        # p1持有特征和生成数据集，p0持有标签
+
         ''' training '''
         optimizer_img = torch.optim.SGD([image_syn, ], lr=args.lr_img, momentum=0.5) # optimizer_img for synthetic data
         optimizer_img.zero_grad()
@@ -150,16 +134,36 @@ def main():
                         img_real = DiffAugment(img_real, args.dsa_strategy, seed=seed, param=args.dsa_param)
                         # img_syn = DiffAugment(img_syn, args.dsa_strategy, seed=seed, param=args.dsa_param)
 
-                    # shape: [batch_size, embd_output]
                     output_real = embed(img_real).detach()
 
-                    # TODO: p0挑出每一个类的output_real
+                    # p0返回每一个类的掩码
+                    label_real = labels_all[start_index: end_index]
+                    mask = torch.zeros((num_classes, batch_size), dtype=torch.bool)
+                    for index, label in enumerate(label_real):
+                        label = label.to('cpu')
+                        mask[label][index] = True
 
+                    # TODO: encrypted & noise
+                    output_real_classes = []
+                    output_real_classes_mean = []
+                    for j in range(num_classes):
+                        output_real_class = output_real[mask[j]]
+                        output_real_class_mean = torch.mean(output_real_class, dim=0)
+                        output_real_classes.append(output_real_class)
+                        output_real_classes_mean.append(output_real_class_mean)
 
-                    # output_syn = embed(img_syn)
+                    # P1获得了每一个类的emdb mean输出，更新浓缩数据集
+                    for c, real_mean in enumerate(output_real_classes_mean):
+                        img_syn = image_syn[c * args.ipc:(c + 1) * args.ipc].reshape(
+                            (args.ipc, channel, im_size[0], im_size[1]))
 
+                        if args.dsa:
+                            img_syn = DiffAugment(img_syn, args.dsa_strategy, seed=seed, param=args.dsa_param)
 
-                    loss += torch.sum((torch.mean(output_real, dim=0) - torch.mean(output_syn, dim=0))**2)
+                        output_syn = embed(img_syn)
+                        output_syn_mean = torch.mean(output_syn, dim=0)
+
+                        loss += torch.sum((real_mean - output_syn_mean)**2)
 
             else: # for ConvNetBN
                 images_real_all = []
