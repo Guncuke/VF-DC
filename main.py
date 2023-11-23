@@ -170,8 +170,7 @@ def main():
             else: # for ConvNetBN
                 loss = torch.tensor(0.0).to(args.device)
                 batch_size = args.batch_real
-                images_real_all = []
-                images_syn_all = []
+
                 for i in range(len(images_all) // batch_size):
 
                     start_index = i * batch_size
@@ -204,6 +203,7 @@ def main():
                         output_real_classes_mean.append(output_real_class_mean)
 
                     # P1获得了每一个类的emdb mean输出，更新浓缩数据集
+                    # TODO: BN 不需要遍历每一个类计算loss，直接计算全部loss
                     for c, real_mean in enumerate(output_real_classes_mean):
                         img_syn = image_syn[c * args.ipc:(c + 1) * args.ipc].reshape(
                             (args.ipc, channel, im_size[0], im_size[1]))
