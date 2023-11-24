@@ -12,7 +12,7 @@ def main():
 
     parser = argparse.ArgumentParser(description='Parameter Processing')
     parser.add_argument('--dataset', type=str, default='MNIST', help='dataset')
-    parser.add_argument('--model', type=str, default='ConvNet', help='model')
+    parser.add_argument('--model', type=str, default='ConvNetBN', help='model')
     parser.add_argument('--ipc', type=int, default=30, help='image(s) per class')
     parser.add_argument('--eval_mode', type=str, default='SS', help='eval_mode') # S: the same to training model, M: multi architectures,  W: net width, D: net depth, A: activation function, P: pooling layer, N: normalization layer,
     parser.add_argument('--num_exp', type=int, default=1, help='the number of experiments')
@@ -79,7 +79,7 @@ def main():
         for it in range(args.Iteration+1):
 
             ''' Evaluate synthetic data '''
-            if it in eval_it_pool:
+            if it in eval_it_pool[1:]:
                 for model_eval in model_eval_pool:
                     print('-------------------------\nEvaluation\nmodel_train = %s, model_eval = %s, iteration = %d'%(args.model, model_eval, it))
 
@@ -128,33 +128,49 @@ def main():
                     start_index = i * batch_size
                     end_index = (i + 1) * batch_size
 
-                    # P1 拿出一个 batch 的数据（特征），embed得到输出
+                    """ 
+                    ================step 1=====================
+                    P1 拿出一个 batch 的数据（特征），embed得到输出
+                    ===========================================
+                    """
                     img_real = images_all[start_index: end_index]
 
                     if args.dsa:
                         seed = int(time.time() * 1000) % 100000
                         img_real = DiffAugment(img_real, args.dsa_strategy, seed=seed, param=args.dsa_param)
-                        # img_syn = DiffAugment(img_syn, args.dsa_strategy, seed=seed, param=args.dsa_param)
 
                     output_real = embed(img_real).detach()
 
-                    # p0返回每一个类的掩码
+                    """
+                    ================step 2=====================
+                               p0返回每一个类的掩码
+                    ===========================================
+                    """
                     label_real = labels_all[start_index: end_index]
                     mask = torch.zeros((num_classes, batch_size), dtype=torch.bool)
                     for index, label in enumerate(label_real):
                         label = label.to('cpu')
                         mask[label][index] = True
 
+                    """
+                    ================step 3=====================
+                    二者加密上传embd结果和掩码，协同计算每一个类的输出
+                       P1将计算结果给P0, P0解密并将mean返回给P1
+                    ===========================================
+                    """
                     # TODO: encrypted & noise
-                    output_real_classes = []
+                    # output_real_classes = []
                     output_real_classes_mean = []
                     for j in range(num_classes):
                         output_real_class = output_real[mask[j]]
                         output_real_class_mean = torch.mean(output_real_class, dim=0)
-                        output_real_classes.append(output_real_class)
+                        # output_real_classes.append(output_real_class)
                         output_real_classes_mean.append(output_real_class_mean)
-
-                    # P1获得了每一个类的emdb mean输出，更新浓缩数据集
+                    """
+                    ================step 4=====================
+                             p1根据结果更新浓缩数据集
+                    ===========================================
+                    """
                     for c, real_mean in enumerate(output_real_classes_mean):
                         img_syn = image_syn[c * args.ipc:(c + 1) * args.ipc].reshape(
                             (args.ipc, channel, im_size[0], im_size[1]))
@@ -194,27 +210,30 @@ def main():
                         mask[label][index] = True
 
                     # TODO: encrypted & noise
-                    output_real_classes = []
+                    # output_real_classes = []
                     output_real_classes_mean = []
                     for j in range(num_classes):
                         output_real_class = output_real[mask[j]]
                         output_real_class_mean = torch.mean(output_real_class, dim=0)
-                        output_real_classes.append(output_real_class)
+                        # output_real_classes.append(output_real_class)
                         output_real_classes_mean.append(output_real_class_mean)
 
                     # P1获得了每一个类的emdb mean输出，更新浓缩数据集
-                    # TODO: BN 不需要遍历每一个类计算loss，直接计算全部loss
-                    for c, real_mean in enumerate(output_real_classes_mean):
+                    images_syn_all = []
+                    for c in range(num_classes):
                         img_syn = image_syn[c * args.ipc:(c + 1) * args.ipc].reshape(
                             (args.ipc, channel, im_size[0], im_size[1]))
 
                         if args.dsa:
                             img_syn = DiffAugment(img_syn, args.dsa_strategy, seed=seed, param=args.dsa_param)
 
-                        output_syn = embed(img_syn)
-                        output_syn_mean = torch.mean(output_syn, dim=0)
+                        images_syn_all.append(img_syn)
 
-                        loss += torch.sum((real_mean - output_syn_mean) ** 2)
+                    images_syn_all = torch.cat(images_syn_all, dim=0)
+                    output_syn = embed(images_syn_all)
+                    output_real = torch.stack(output_real_classes_mean)
+
+                    loss += torch.sum((output_real - torch.mean(output_syn.reshape(num_classes, args.ipc, -1), dim=1)) ** 2)
 
 
             optimizer_img.zero_grad()
