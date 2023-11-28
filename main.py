@@ -121,7 +121,7 @@ def main():
             loss_final = 0.0
             batch_size = args.batch_real
             for i in range(len(images_all) // batch_size):
-                loss = torch.tensor(0.0).to(args.device)
+
                 start_index = i * batch_size
                 end_index = (i + 1) * batch_size
 
