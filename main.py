@@ -116,11 +116,9 @@ def main():
 
             embed = net.module.embed if torch.cuda.device_count() > 1 else net.embed # for GPU parallel
 
-            loss_avg = 0
-
             # TODO: change to our method
             ''' update synthetic data '''
-
+            loss_final = 0.0
             batch_size = args.batch_real
             for i in range(len(images_all) // batch_size):
                 loss = torch.tensor(0.0).to(args.device)
@@ -183,19 +181,15 @@ def main():
                 ===========================================
                 """
                 # 这里偷懒了，直接就类0~n直接按顺序排下来
-                loss += torch.sum((output_real_classes_mean - torch.mean(output_syn.reshape(num_classes, args.ipc, -1), dim=1)) ** 2)
-
+                loss = torch.sum((output_real_classes_mean - torch.mean(output_syn.reshape(num_classes, args.ipc, -1), dim=1)) ** 2)
 
                 optimizer_img.zero_grad()
                 loss.backward()
                 optimizer_img.step()
-                loss_avg += loss.item()
-
-
-            loss_avg /= (num_classes)
+                loss_final = loss.item()
 
             if it%10 == 0:
-                print('%s iter = %05d, loss = %.4f' % (get_time(), it, loss_avg))
+                print('%s iter = %05d, loss = %.4f' % (get_time(), it, loss_final))
 
             if it == args.Iteration: # only record the final results
                 data_save.append([copy.deepcopy(image_syn.detach().cpu()), copy.deepcopy(label_syn.detach().cpu())])
