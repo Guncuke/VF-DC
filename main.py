@@ -5,15 +5,15 @@ import argparse
 import numpy as np
 import torch
 from torchvision.utils import save_image
-from utils import get_loops, get_dataset, get_network, get_eval_pool, evaluate_synset, get_daparam, match_loss, get_time, TensorDataset, epoch, DiffAugment, ParamDiffAug
+from utils import get_dataset, get_network, get_eval_pool, evaluate_synset, get_time, TensorDataset, DiffAugment, ParamDiffAug
 
 
 def main():
 
     parser = argparse.ArgumentParser(description='Parameter Processing')
-    parser.add_argument('--dataset', type=str, default='MNIST', help='dataset')
-    parser.add_argument('--model', type=str, default='ConvNetBN', help='model')
-    parser.add_argument('--ipc', type=int, default=30, help='image(s) per class')
+    parser.add_argument('--dataset', type=str, default='CIFAR10', help='dataset')
+    parser.add_argument('--model', type=str, default='ConvNet', help='model')
+    parser.add_argument('--ipc', type=int, default=50, help='image(s) per class')
     parser.add_argument('--eval_mode', type=str, default='SS', help='eval_mode') # S: the same to training model, M: multi architectures,  W: net width, D: net depth, A: activation function, P: pooling layer, N: normalization layer,
     parser.add_argument('--num_exp', type=int, default=1, help='the number of experiments')
     parser.add_argument('--num_eval', type=int, default=10, help='the number of evaluating randomly initialized models')
@@ -29,7 +29,7 @@ def main():
 
     args = parser.parse_args()
     args.method = 'DM'
-    args.outer_loop, args.inner_loop = get_loops(args.ipc)
+    # args.outer_loop, args.inner_loop = get_loops(args.ipc)
     args.device = 'cuda' if torch.cuda.is_available() else 'cpu'
     args.dsa_param = ParamDiffAug()
     args.dsa = False if args.dsa_strategy in ['none', 'None'] else True
@@ -40,7 +40,7 @@ def main():
     if not os.path.exists(args.save_path):
         os.mkdir(args.save_path)
 
-    eval_it_pool = np.arange(0, args.Iteration+1, 2000).tolist() if args.eval_mode == 'S' or args.eval_mode == 'SS' else [args.Iteration] # The list of iterations when we evaluate models and record results.
+    eval_it_pool = np.arange(0, args.Iteration+1, 250).tolist() if args.eval_mode == 'S' or args.eval_mode == 'SS' else [args.Iteration] # The list of iterations when we evaluate models and record results.
     print('eval_it_pool: ', eval_it_pool)
     channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader = get_dataset(args.dataset, args.data_path)
     model_eval_pool = get_eval_pool(args.eval_mode, args.model, args.model)
@@ -143,7 +143,7 @@ def main():
 
                     """
                     ================step 2=====================
-                               p0返回每一个类的掩码
+                                p0计算每一个类的掩码
                     ===========================================
                     """
                     label_real = labels_all[start_index: end_index]
@@ -154,8 +154,8 @@ def main():
 
                     """
                     ================step 3=====================
-                    二者加密上传embd结果和掩码，协同计算每一个类的输出
-                       P1将计算结果给P0, P0解密并将mean返回给P1
+                    二者加密上传embd结果和掩码，协同计算每一个类的平均embed结果
+                            P0获得了avg的embedding
                     ===========================================
                     """
                     # TODO: encrypted & noise
@@ -166,23 +166,25 @@ def main():
                         output_real_class_mean = torch.mean(output_real_class, dim=0)
                         # output_real_classes.append(output_real_class)
                         output_real_classes_mean.append(output_real_class_mean)
+                    output_real_classes_mean = torch.stack(output_real_classes_mean)
+
                     """
                     ================step 4=====================
-                             p1根据结果更新浓缩数据集
+                      p1再次计算浓缩数据集的embedding，传递给P0
                     ===========================================
                     """
-                    for c, real_mean in enumerate(output_real_classes_mean):
-                        img_syn = image_syn[c * args.ipc:(c + 1) * args.ipc].reshape(
-                            (args.ipc, channel, im_size[0], im_size[1]))
+                    if args.dsa:
+                        image_syn = DiffAugment(image_syn, args.dsa_strategy, seed=seed, param=args.dsa_param)
+                    output_syn = embed(image_syn)
 
-                        if args.dsa:
-                            img_syn = DiffAugment(img_syn, args.dsa_strategy, seed=seed, param=args.dsa_param)
-
-                        output_syn = embed(img_syn)
-                        output_syn_mean = torch.mean(output_syn, dim=0)
-
-                        loss += torch.sum((real_mean - output_syn_mean)**2)
-
+                    """
+                    ================step 5=====================
+                      p0 根据收集到的原始数据的avg_embed和生成数据的embed
+                      计算梯度
+                    ===========================================
+                    """
+                    # 这里偷懒了，直接就类0~n直接按顺序排下来
+                    loss += torch.sum((output_real_classes_mean - torch.mean(output_syn.reshape(num_classes, args.ipc, -1), dim=1)) ** 2)
             else: # for ConvNetBN
                 loss = torch.tensor(0.0).to(args.device)
                 batch_size = args.batch_real
