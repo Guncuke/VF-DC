@@ -120,128 +120,76 @@ def main():
 
             # TODO: change to our method
             ''' update synthetic data '''
-            if 'BN' not in args.model: # for ConvNet
+
+            batch_size = args.batch_real
+            for i in range(len(images_all) // batch_size):
                 loss = torch.tensor(0.0).to(args.device)
-                batch_size = args.batch_real
-                for i in range(len(images_all) // batch_size):
+                start_index = i * batch_size
+                end_index = (i + 1) * batch_size
 
-                    start_index = i * batch_size
-                    end_index = (i + 1) * batch_size
+                """ 
+                ================step 1=====================
+                P1 拿出一个 batch 的数据（特征），embed得到输出
+                ===========================================
+                """
+                img_real = images_all[start_index: end_index]
 
-                    """ 
-                    ================step 1=====================
-                    P1 拿出一个 batch 的数据（特征），embed得到输出
-                    ===========================================
-                    """
-                    img_real = images_all[start_index: end_index]
+                if args.dsa:
+                    seed = int(time.time() * 1000) % 100000
+                    img_real = DiffAugment(img_real, args.dsa_strategy, seed=seed, param=args.dsa_param)
 
-                    if args.dsa:
-                        seed = int(time.time() * 1000) % 100000
-                        img_real = DiffAugment(img_real, args.dsa_strategy, seed=seed, param=args.dsa_param)
+                output_real = embed(img_real).detach()
 
-                    output_real = embed(img_real).detach()
+                """
+                ================step 2=====================
+                            p0计算每一个类的掩码
+                ===========================================
+                """
+                label_real = labels_all[start_index: end_index]
+                mask = torch.zeros((num_classes, batch_size), dtype=torch.bool)
+                for index, label in enumerate(label_real):
+                    label = label.to('cpu')
+                    mask[label][index] = True
 
-                    """
-                    ================step 2=====================
-                                p0计算每一个类的掩码
-                    ===========================================
-                    """
-                    label_real = labels_all[start_index: end_index]
-                    mask = torch.zeros((num_classes, batch_size), dtype=torch.bool)
-                    for index, label in enumerate(label_real):
-                        label = label.to('cpu')
-                        mask[label][index] = True
+                """
+                ================step 3=====================
+                二者加密上传embd结果和掩码，协同计算每一个类的平均embed结果
+                        P0获得了avg的embedding
+                ===========================================
+                """
+                # TODO: encrypted & noise
+                # output_real_classes = []
+                output_real_classes_mean = []
+                for j in range(num_classes):
+                    output_real_class = output_real[mask[j]]
+                    output_real_class_mean = torch.mean(output_real_class, dim=0)
+                    # output_real_classes.append(output_real_class)
+                    output_real_classes_mean.append(output_real_class_mean)
+                output_real_classes_mean = torch.stack(output_real_classes_mean)
 
-                    """
-                    ================step 3=====================
-                    二者加密上传embd结果和掩码，协同计算每一个类的平均embed结果
-                            P0获得了avg的embedding
-                    ===========================================
-                    """
-                    # TODO: encrypted & noise
-                    # output_real_classes = []
-                    output_real_classes_mean = []
-                    for j in range(num_classes):
-                        output_real_class = output_real[mask[j]]
-                        output_real_class_mean = torch.mean(output_real_class, dim=0)
-                        # output_real_classes.append(output_real_class)
-                        output_real_classes_mean.append(output_real_class_mean)
-                    output_real_classes_mean = torch.stack(output_real_classes_mean)
+                """
+                ================step 4=====================
+                  p1再次计算浓缩数据集的embedding，传递给P0
+                ===========================================
+                """
+                if args.dsa:
+                    image_syn = DiffAugment(image_syn, args.dsa_strategy, seed=seed, param=args.dsa_param)
+                output_syn = embed(image_syn)
 
-                    """
-                    ================step 4=====================
-                      p1再次计算浓缩数据集的embedding，传递给P0
-                    ===========================================
-                    """
-                    if args.dsa:
-                        image_syn = DiffAugment(image_syn, args.dsa_strategy, seed=seed, param=args.dsa_param)
-                    output_syn = embed(image_syn)
-
-                    """
-                    ================step 5=====================
-                      p0 根据收集到的原始数据的avg_embed和生成数据的embed
-                      计算梯度
-                    ===========================================
-                    """
-                    # 这里偷懒了，直接就类0~n直接按顺序排下来
-                    loss += torch.sum((output_real_classes_mean - torch.mean(output_syn.reshape(num_classes, args.ipc, -1), dim=1)) ** 2)
-            else: # for ConvNetBN
-                loss = torch.tensor(0.0).to(args.device)
-                batch_size = args.batch_real
-
-                for i in range(len(images_all) // batch_size):
-
-                    start_index = i * batch_size
-                    end_index = (i + 1) * batch_size
-
-                    # P1 拿出一个 batch 的数据（特征），embed得到输出
-                    img_real = images_all[start_index: end_index]
-
-                    if args.dsa:
-                        seed = int(time.time() * 1000) % 100000
-                        img_real = DiffAugment(img_real, args.dsa_strategy, seed=seed, param=args.dsa_param)
-                        # img_syn = DiffAugment(img_syn, args.dsa_strategy, seed=seed, param=args.dsa_param)
-
-                    output_real = embed(img_real).detach()
-
-                    # p0返回每一个类的掩码
-                    label_real = labels_all[start_index: end_index]
-                    mask = torch.zeros((num_classes, batch_size), dtype=torch.bool)
-                    for index, label in enumerate(label_real):
-                        label = label.to('cpu')
-                        mask[label][index] = True
-
-                    # TODO: encrypted & noise
-                    # output_real_classes = []
-                    output_real_classes_mean = []
-                    for j in range(num_classes):
-                        output_real_class = output_real[mask[j]]
-                        output_real_class_mean = torch.mean(output_real_class, dim=0)
-                        # output_real_classes.append(output_real_class)
-                        output_real_classes_mean.append(output_real_class_mean)
-
-                    # P1获得了每一个类的emdb mean输出，更新浓缩数据集
-                    images_syn_all = []
-                    for c in range(num_classes):
-                        img_syn = image_syn[c * args.ipc:(c + 1) * args.ipc].reshape(
-                            (args.ipc, channel, im_size[0], im_size[1]))
-
-                        if args.dsa:
-                            img_syn = DiffAugment(img_syn, args.dsa_strategy, seed=seed, param=args.dsa_param)
-
-                        images_syn_all.append(img_syn)
-
-                    images_syn_all = torch.cat(images_syn_all, dim=0)
-                    output_syn = embed(images_syn_all)
-                    output_real = torch.stack(output_real_classes_mean)
-
-                    loss += torch.sum((output_real - torch.mean(output_syn.reshape(num_classes, args.ipc, -1), dim=1)) ** 2)
+                """
+                ================step 5=====================
+                  p0 根据收集到的原始数据的avg_embed和生成数据的embed
+                  计算梯度
+                ===========================================
+                """
+                # 这里偷懒了，直接就类0~n直接按顺序排下来
+                loss += torch.sum((output_real_classes_mean - torch.mean(output_syn.reshape(num_classes, args.ipc, -1), dim=1)) ** 2)
 
 
-            optimizer_img.zero_grad()
-            loss.backward()
-            optimizer_img.step()
-            loss_avg += loss.item()
+                optimizer_img.zero_grad()
+                loss.backward()
+                optimizer_img.step()
+                loss_avg += loss.item()
 
 
             loss_avg /= (num_classes)
