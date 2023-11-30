@@ -11,9 +11,9 @@ from utils import get_dataset, get_network, get_eval_pool, evaluate_synset, get_
 def main():
 
     parser = argparse.ArgumentParser(description='Parameter Processing')
-    parser.add_argument('--dataset', type=str, default='CIFAR10', help='dataset')
+    parser.add_argument('--dataset', type=str, default='MNIST', help='dataset')
     parser.add_argument('--model', type=str, default='ConvNet', help='model')
-    parser.add_argument('--ipc', type=int, default=50, help='image(s) per class')
+    parser.add_argument('--ipc', type=int, default=10, help='image(s) per class')
     parser.add_argument('--eval_mode', type=str, default='SS', help='eval_mode') # S: the same to training model, M: multi architectures,  W: net width, D: net depth, A: activation function, P: pooling layer, N: normalization layer,
     parser.add_argument('--num_exp', type=int, default=1, help='the number of experiments')
     parser.add_argument('--num_eval', type=int, default=10, help='the number of evaluating randomly initialized models')
@@ -118,10 +118,10 @@ def main():
 
             # TODO: change to our method
             ''' update synthetic data '''
-            loss_final = 0.0
             batch_size = args.batch_real
-            for i in range(len(images_all) // batch_size):
+            loss = torch.tensor(0.0).to(args.device)
 
+            for i in range(len(images_all) // batch_size):
                 start_index = i * batch_size
                 end_index = (i + 1) * batch_size
 
@@ -170,9 +170,10 @@ def main():
                   p1再次计算浓缩数据集的embedding，传递给P0
                 ===========================================
                 """
+                img_syn = image_syn[:]
                 if args.dsa:
-                    image_syn = DiffAugment(image_syn, args.dsa_strategy, seed=seed, param=args.dsa_param)
-                output_syn = embed(image_syn)
+                    img_syn = DiffAugment(img_syn, args.dsa_strategy, seed=seed, param=args.dsa_param)
+                output_syn = embed(img_syn)
 
                 """
                 ================step 5=====================
@@ -181,15 +182,18 @@ def main():
                 ===========================================
                 """
                 # 这里偷懒了，直接就类0~n直接按顺序排下来
-                loss = torch.sum((output_real_classes_mean - torch.mean(output_syn.reshape(num_classes, args.ipc, -1), dim=1)) ** 2)
+                loss += torch.sum((output_real_classes_mean - torch.mean(output_syn.reshape(num_classes, args.ipc, -1), dim=1)) ** 2)
 
-                optimizer_img.zero_grad()
-                loss.backward()
-                optimizer_img.step()
-                loss_final = loss.item()
+                """
+                ================step 6=====================
+                  p0 将梯度传给 p1, p1反向传播生成数据集
+                ===========================================
+                """
+            optimizer_img.zero_grad()
+            loss.backward()
+            optimizer_img.step()
 
-            if it%10 == 0:
-                print('%s iter = %05d, loss = %.4f' % (get_time(), it, loss_final))
+            print('%s iter = %05d, loss = %.4f' % (get_time(), it, loss.item()))
 
             if it == args.Iteration: # only record the final results
                 data_save.append([copy.deepcopy(image_syn.detach().cpu()), copy.deepcopy(label_syn.detach().cpu())])
