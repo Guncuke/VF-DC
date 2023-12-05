@@ -119,7 +119,6 @@ def main():
             # TODO: change to our method
             ''' update synthetic data '''
             batch_size = args.batch_real
-            loss = torch.tensor(0.0).to(args.device)
 
             for i in range(len(images_all) // batch_size):
                 start_index = i * batch_size
@@ -182,7 +181,7 @@ def main():
                 ===========================================
                 """
                 # 这里偷懒了，直接就类0~n直接按顺序排下来
-                loss += torch.sum((output_real_classes_mean - torch.mean(output_syn.reshape(num_classes, args.ipc, -1), dim=1)) ** 2)
+                loss = torch.sum((output_real_classes_mean - torch.mean(output_syn.reshape(num_classes, args.ipc, -1), dim=1)) ** 2)
 
                 """
                 ================step 6=====================
@@ -193,7 +192,7 @@ def main():
             loss.backward()
             optimizer_img.step()
 
-            print('%s iter = %05d, loss = %.4f' % (get_time(), it, loss.item()))
+            print('%s iter = %05d, loss = %.4f' % (get_time(), it, loss.item()/batch_size))
 
             if it == args.Iteration: # only record the final results
                 data_save.append([copy.deepcopy(image_syn.detach().cpu()), copy.deepcopy(label_syn.detach().cpu())])
