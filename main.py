@@ -13,7 +13,7 @@ def main():
     parser = argparse.ArgumentParser(description='Parameter Processing')
     parser.add_argument('--dataset', type=str, default='MNIST', help='dataset')
     parser.add_argument('--model', type=str, default='ConvNet', help='model')
-    parser.add_argument('--ipc', type=int, default=10, help='image(s) per class')
+    parser.add_argument('--ipc', type=int, default=100, help='image(s) per class')
     parser.add_argument('--eval_mode', type=str, default='SS', help='eval_mode') # S: the same to training model, M: multi architectures,  W: net width, D: net depth, A: activation function, P: pooling layer, N: normalization layer,
     parser.add_argument('--num_exp', type=int, default=1, help='the number of experiments')
     parser.add_argument('--num_eval', type=int, default=10, help='the number of evaluating randomly initialized models')
@@ -62,8 +62,11 @@ def main():
         images_all = [torch.unsqueeze(dst_train[i][0], dim=0) for i in range(len(dst_train))]
         labels_all = [dst_train[i][1] for i in range(len(dst_train))]
 
-        images_all = torch.cat(images_all, dim=0).to(args.device)
-        labels_all = torch.tensor(labels_all, dtype=torch.long, device=args.device)
+        # images_all = torch.cat(images_all, dim=0).to(args.device)
+        # labels_all = torch.tensor(labels_all, dtype=torch.long, device=args.device)
+
+        images_all = torch.cat(images_all, dim=0)
+        labels_all = torch.tensor(labels_all, dtype=torch.long)
 
         ''' initialize the synthetic data '''
         image_syn = torch.randn(size=(num_classes*args.ipc, channel, im_size[0], im_size[1]), dtype=torch.float, requires_grad=True, device=args.device)
@@ -129,7 +132,7 @@ def main():
                 P1 拿出一个 batch 的数据（特征），embed得到输出
                 ===========================================
                 """
-                img_real = images_all[start_index: end_index]
+                img_real = images_all[start_index: end_index].to(args.device)
 
                 if args.dsa:
                     seed = int(time.time() * 1000) % 100000
