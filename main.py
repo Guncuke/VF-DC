@@ -197,6 +197,11 @@ def main():
 
             print('%s iter = %05d, loss = %.4f' % (get_time(), it, loss.item()/batch_size))
 
+            # 每一次迭代完打乱原始训练集
+            perm_indices = torch.randperm(len(images_all))
+            images_all = images_all[perm_indices]
+            labels_all = labels_all[perm_indices]
+
             if it == args.Iteration: # only record the final results
                 data_save.append([copy.deepcopy(image_syn.detach().cpu()), copy.deepcopy(label_syn.detach().cpu())])
                 torch.save({'data': data_save, 'accs_all_exps': accs_all_exps, }, os.path.join(args.save_path, 'res_%s_%s_%s_%dipc.pt'%(args.method, args.dataset, args.model, args.ipc)))
