@@ -13,7 +13,7 @@ def main():
     parser = argparse.ArgumentParser(description='Parameter Processing')
     parser.add_argument('--dataset', type=str, default='MNIST', help='dataset')
     parser.add_argument('--model', type=str, default='ConvNet', help='model')
-    parser.add_argument('--ipc', type=int, default=100, help='image(s) per class')
+    parser.add_argument('--ipc', type=int, default=50, help='image(s) per class')
     parser.add_argument('--eval_mode', type=str, default='SS', help='eval_mode') # S: the same to training model, M: multi architectures,  W: net width, D: net depth, A: activation function, P: pooling layer, N: normalization layer,
     parser.add_argument('--num_exp', type=int, default=1, help='the number of experiments')
     parser.add_argument('--num_eval', type=int, default=10, help='the number of evaluating randomly initialized models')
@@ -29,8 +29,11 @@ def main():
 
     args = parser.parse_args()
     args.method = 'DM'
-    # args.outer_loop, args.inner_loop = get_loops(args.ipc)
+
     args.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    # if args.device == 'cuda':
+    #     torch.cuda.set_device(2)
+    #     args.device = torch.device('cuda:{}'.format(2))
     args.dsa_param = ParamDiffAug()
     args.dsa = False if args.dsa_strategy in ['none', 'None'] else True
 
@@ -40,7 +43,7 @@ def main():
     if not os.path.exists(args.save_path):
         os.mkdir(args.save_path)
 
-    eval_it_pool = np.arange(0, args.Iteration+1, 250).tolist() if args.eval_mode == 'S' or args.eval_mode == 'SS' else [args.Iteration] # The list of iterations when we evaluate models and record results.
+    eval_it_pool = np.arange(0, args.Iteration+1, 500).tolist() if args.eval_mode == 'S' or args.eval_mode == 'SS' else [args.Iteration] # The list of iterations when we evaluate models and record results.
     print('eval_it_pool: ', eval_it_pool)
     channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader = get_dataset(args.dataset, args.data_path)
     model_eval_pool = get_eval_pool(args.eval_mode, args.model, args.model)
@@ -118,6 +121,8 @@ def main():
                 param.requires_grad = False
 
             embed = net.module.embed if torch.cuda.device_count() > 1 else net.embed # for GPU parallel
+            # embed = net.embed # for GPU parallel
+
 
             # TODO: change to our method
             ''' update synthetic data '''
@@ -191,9 +196,9 @@ def main():
                   p0 将梯度传给 p1, p1反向传播生成数据集
                 ===========================================
                 """
-            optimizer_img.zero_grad()
-            loss.backward()
-            optimizer_img.step()
+                optimizer_img.zero_grad()
+                loss.backward()
+                optimizer_img.step()
 
             print('%s iter = %05d, loss = %.4f' % (get_time(), it, loss.item()/batch_size))
 
