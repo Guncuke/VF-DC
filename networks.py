@@ -19,20 +19,28 @@ class MLP(nn.Module):
         input_size = 1
         for size in im_size:
             input_size *= size
-        self.fc_1 = nn.Linear(input_size, 128)
-        self.fc_2 = nn.Linear(128, 128)
-        self.fc_3 = nn.Linear(128, num_classes)
+        self.bn_1 = nn.BatchNorm1d(input_size)
+        self.fc_1 = nn.Linear(input_size, 256)
+        self.bn_2 = nn.BatchNorm1d(256)
+        self.fc_2 = nn.Linear(256, 256)
+        self.bn_3 = nn.BatchNorm1d(256)
+        self.fc_3 = nn.Linear(256, num_classes)
 
     def embed(self, x):
         out = x.view(x.size(0), -1)
+        out = self.bn_1(out)
         out = F.relu(self.fc_1(out))
+        out = self.bn_2(out)
         out = F.relu(self.fc_2(out))
         return out
 
     def forward(self, x):
         out = x.view(x.size(0), -1)
+        out = self.bn_1(out)
         out = F.relu(self.fc_1(out))
+        out = self.bn_2(out)
         out = F.relu(self.fc_2(out))
+        out = self.bn_3(out)
         out = self.fc_3(out)
         return out
 

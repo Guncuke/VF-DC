@@ -13,15 +13,15 @@ def main():
     parser = argparse.ArgumentParser(description='Parameter Processing')
     parser.add_argument('--dataset', type=str, default='MIMIC', help='dataset')
     parser.add_argument('--model', type=str, default='MLP', help='model')
-    parser.add_argument('--ipc', type=int, default=200, help='image(s) per class')
+    parser.add_argument('--ipc', type=int, default=100, help='image(s) per class')
     parser.add_argument('--eval_mode', type=str, default='SS', help='eval_mode') # S: the same to training model, M: multi architectures,  W: net width, D: net depth, A: activation function, P: pooling layer, N: normalization layer,
     parser.add_argument('--num_exp', type=int, default=1, help='the number of experiments')
     parser.add_argument('--num_eval', type=int, default=10, help='the number of evaluating randomly initialized models')
     parser.add_argument('--epoch_eval_train', type=int, default=1000, help='epochs to train a model with synthetic data') # it can be small for speeding up with little performance drop
     parser.add_argument('--Iteration', type=int, default=20000, help='training iterations')
-    parser.add_argument('--lr_img', type=float, default=1.0, help='learning rate for updating synthetic images')
+    parser.add_argument('--lr_img', type=float, default=0.05, help='learning rate for updating synthetic images')
     parser.add_argument('--lr_net', type=float, default=0.01, help='learning rate for updating network parameters')
-    parser.add_argument('--batch_real', type=int, default=2560, help='batch size for real data')
+    parser.add_argument('--batch_real', type=int, default=512, help='batch size for real data')
     parser.add_argument('--batch_train', type=int, default=256, help='batch size for training networks')
     parser.add_argument('--dsa_strategy', type=str, default='color_crop_cutout_flip_scale_rotate', help='differentiable Siamese augmentation strategy')
     parser.add_argument('--data_path', type=str, default='data', help='dataset path')
@@ -36,19 +36,18 @@ def main():
         torch.cuda.set_device(args.gpu_num)
         args.device = torch.device('cuda:{}'.format(args.gpu_num))
     args.dsa_param = ParamDiffAug()
-    # args.dsa = False if args.dsa_strategy in ['none', 'None'] else True
-    args.dsa = False
     if not os.path.exists(args.data_path):
         os.mkdir(args.data_path)
 
     if not os.path.exists(args.save_path):
         os.mkdir(args.save_path)
 
-    eval_it_pool = np.arange(0, args.Iteration+1, 5000).tolist() if args.eval_mode == 'S' or args.eval_mode == 'SS' else [args.Iteration] # The list of iterations when we evaluate models and record results.
+    eval_it_pool = np.arange(0, args.Iteration+1, 2000).tolist() if args.eval_mode == 'S' or args.eval_mode == 'SS' else [args.Iteration] # The list of iterations when we evaluate models and record results.
     print('eval_it_pool: ', eval_it_pool)
     style, channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader = get_dataset(args.dataset, args.data_path)
     model_eval_pool = get_eval_pool(args.eval_mode, args.model, args.model)
 
+    args.dsa = False if args.dsa_strategy in ['none', 'None'] or style!='image' else True
 
     accs_all_exps = dict() # record performances of all experiments
     for key in model_eval_pool:
@@ -86,7 +85,7 @@ def main():
         for it in range(args.Iteration+1):
 
             ''' Evaluate synthetic data '''
-            if it in eval_it_pool[1:]:
+            if it in eval_it_pool[:]:
                 for model_eval in model_eval_pool:
                     print('-------------------------\nEvaluation\nmodel_train = %s, model_eval = %s, iteration = %d'%(args.model, model_eval, it))
 
@@ -124,10 +123,9 @@ def main():
                 param.requires_grad = False
 
             # embed = net.module.embed if torch.cuda.device_count() > 1 else net.embed # for GPU parallel
-            embed = net.embed # for GPU parallel
+            embed = net.embed
 
 
-            # TODO: change to our method
             ''' update synthetic data '''
             batch_size = args.batch_real
 
