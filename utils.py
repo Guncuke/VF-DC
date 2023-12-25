@@ -110,6 +110,8 @@ def get_dataset(dataset, data_path):
         data_path = os.path.join(data_path, 'mimic')
         x_train = F.normalize(torch.tensor(np.load(os.path.join(data_path, "x_train.npy"))), p=2, dim=0)
         x_test = F.normalize(torch.tensor(np.load(os.path.join(data_path, "x_test.npy"))), p=2, dim=0)
+        # x_train = torch.tensor(np.load(os.path.join(data_path, "x_train.npy")))
+        # x_test = torch.tensor(np.load(os.path.join(data_path, "x_test.npy")))
         y_train = torch.tensor(np.load(os.path.join(data_path, "y_train.npy")))
         y_test = torch.tensor(np.load(os.path.join(data_path, "y_test.npy")))
         dst_train = TensorDataset(x_train, y_train)

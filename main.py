@@ -4,6 +4,7 @@ import copy
 import argparse
 import numpy as np
 import torch
+import pandas as pd
 from torchvision.utils import save_image
 from utils import get_dataset, get_network, get_eval_pool, evaluate_synset, get_time, TensorDataset, DiffAugment, ParamDiffAug
 
@@ -16,7 +17,7 @@ def main():
     parser.add_argument('--ipc', type=int, default=50, help='image(s) per class')
     parser.add_argument('--eval_mode', type=str, default='SS', help='eval_mode') # S: the same to training model, M: multi architectures,  W: net width, D: net depth, A: activation function, P: pooling layer, N: normalization layer,
     parser.add_argument('--num_exp', type=int, default=1, help='the number of experiments')
-    parser.add_argument('--num_eval', type=int, default=10, help='the number of evaluating randomly initialized models')
+    parser.add_argument('--num_eval', type=int, default=20, help='the number of evaluating randomly initialized models')
     parser.add_argument('--epoch_eval_train', type=int, default=1000, help='epochs to train a model with synthetic data') # it can be small for speeding up with little performance drop
     parser.add_argument('--Iteration', type=int, default=20000, help='training iterations')
     parser.add_argument('--lr_img', type=float, default=0.05, help='learning rate for updating synthetic images')
@@ -112,8 +113,13 @@ def main():
                     image_syn_vis[image_syn_vis<0] = 0.0
                     image_syn_vis[image_syn_vis>1] = 1.0
                     save_image(image_syn_vis, save_name, nrow=args.ipc) # Trying normalize = True/False may get better visual effects.
-
-
+                else:
+                    save_name = os.path.join(args.save_path, 'vis_%s_%s_%s_%dipc_exp%d_iter%d.csv'%(args.method, args.dataset, args.model, args.ipc, exp, it))
+                    image_syn_vis = copy.deepcopy(image_syn.detach().cpu().squeeze())
+                    label_syn_vis = copy.deepcopy(label_syn.detach().cpu())
+                    result_tensor = torch.cat((image_syn_vis, label_syn_vis.unsqueeze(1)), dim=1)
+                    df = pd.DataFrame(result_tensor.numpy())
+                    df.to_csv(save_name, index=False)
 
             ''' Train synthetic data '''
             net = get_network(args.model, channel, num_classes, args.device, im_size).to(args.device) # get a random model
@@ -177,7 +183,7 @@ def main():
                   p1再次计算浓缩数据集的embedding，传递给P0
                 ===========================================
                 """
-                img_syn = image_syn[:].squeeze()
+                img_syn = image_syn[:]
                 if args.dsa:
                     img_syn = DiffAugment(img_syn, args.dsa_strategy, seed=seed, param=args.dsa_param)
                 output_syn = embed(img_syn)
