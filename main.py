@@ -13,13 +13,13 @@ def main():
     parser = argparse.ArgumentParser(description='Parameter Processing')
     parser.add_argument('--dataset', type=str, default='MIMIC', help='dataset')
     parser.add_argument('--model', type=str, default='MLP', help='model')
-    parser.add_argument('--ipc', type=int, default=100, help='image(s) per class')
+    parser.add_argument('--ipc', type=int, default=50, help='image(s) per class')
     parser.add_argument('--eval_mode', type=str, default='SS', help='eval_mode') # S: the same to training model, M: multi architectures,  W: net width, D: net depth, A: activation function, P: pooling layer, N: normalization layer,
     parser.add_argument('--num_exp', type=int, default=1, help='the number of experiments')
     parser.add_argument('--num_eval', type=int, default=10, help='the number of evaluating randomly initialized models')
     parser.add_argument('--epoch_eval_train', type=int, default=1000, help='epochs to train a model with synthetic data') # it can be small for speeding up with little performance drop
     parser.add_argument('--Iteration', type=int, default=20000, help='training iterations')
-    parser.add_argument('--lr_img', type=float, default=0.05, help='learning rate for updating synthetic images')
+    parser.add_argument('--lr_img', type=float, default=0.03, help='learning rate for updating synthetic images')
     parser.add_argument('--lr_net', type=float, default=0.01, help='learning rate for updating network parameters')
     parser.add_argument('--batch_real', type=int, default=512, help='batch size for real data')
     parser.add_argument('--batch_train', type=int, default=256, help='batch size for training networks')
@@ -42,7 +42,7 @@ def main():
     if not os.path.exists(args.save_path):
         os.mkdir(args.save_path)
 
-    eval_it_pool = np.arange(0, args.Iteration+1, 2000).tolist() if args.eval_mode == 'S' or args.eval_mode == 'SS' else [args.Iteration] # The list of iterations when we evaluate models and record results.
+    eval_it_pool = np.arange(0, args.Iteration+1, 1000).tolist() if args.eval_mode == 'S' or args.eval_mode == 'SS' else [args.Iteration] # The list of iterations when we evaluate models and record results.
     print('eval_it_pool: ', eval_it_pool)
     style, channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader = get_dataset(args.dataset, args.data_path)
     model_eval_pool = get_eval_pool(args.eval_mode, args.model, args.model)
@@ -76,7 +76,6 @@ def main():
         label_syn = torch.tensor(np.concatenate([np.ones(args.ipc, dtype=np.int64) * i for i in range(num_classes)]),
                                  dtype=torch.long, requires_grad=False, device=args.device).view(
             -1)  # [0,0,0, 1,1,1, ..., 9,9,9]        # p1持有特征和生成数据集，p0持有标签
-
         ''' training '''
         optimizer_img = torch.optim.SGD([image_syn, ], lr=args.lr_img, momentum=0.5) # optimizer_img for synthetic data
         optimizer_img.zero_grad()
@@ -178,7 +177,7 @@ def main():
                   p1再次计算浓缩数据集的embedding，传递给P0
                 ===========================================
                 """
-                img_syn = image_syn[:]
+                img_syn = image_syn[:].squeeze()
                 if args.dsa:
                     img_syn = DiffAugment(img_syn, args.dsa_strategy, seed=seed, param=args.dsa_param)
                 output_syn = embed(img_syn)
