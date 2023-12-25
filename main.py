@@ -11,9 +11,9 @@ from utils import get_dataset, get_network, get_eval_pool, evaluate_synset, get_
 def main():
 
     parser = argparse.ArgumentParser(description='Parameter Processing')
-    parser.add_argument('--dataset', type=str, default='MNIST', help='dataset')
-    parser.add_argument('--model', type=str, default='ConvNet', help='model')
-    parser.add_argument('--ipc', type=int, default=50, help='image(s) per class')
+    parser.add_argument('--dataset', type=str, default='MIMIC', help='dataset')
+    parser.add_argument('--model', type=str, default='MLP', help='model')
+    parser.add_argument('--ipc', type=int, default=200, help='image(s) per class')
     parser.add_argument('--eval_mode', type=str, default='SS', help='eval_mode') # S: the same to training model, M: multi architectures,  W: net width, D: net depth, A: activation function, P: pooling layer, N: normalization layer,
     parser.add_argument('--num_exp', type=int, default=1, help='the number of experiments')
     parser.add_argument('--num_eval', type=int, default=10, help='the number of evaluating randomly initialized models')
@@ -26,26 +26,27 @@ def main():
     parser.add_argument('--dsa_strategy', type=str, default='color_crop_cutout_flip_scale_rotate', help='differentiable Siamese augmentation strategy')
     parser.add_argument('--data_path', type=str, default='data', help='dataset path')
     parser.add_argument('--save_path', type=str, default='result', help='path to save results')
+    parser.add_argument('--gpu_num', type=int, default=3, help='use witch card')
 
     args = parser.parse_args()
     args.method = 'DM'
 
     args.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    # if args.device == 'cuda':
-    #     torch.cuda.set_device(2)
-    #     args.device = torch.device('cuda:{}'.format(2))
+    if args.device == 'cuda':
+        torch.cuda.set_device(args.gpu_num)
+        args.device = torch.device('cuda:{}'.format(args.gpu_num))
     args.dsa_param = ParamDiffAug()
-    args.dsa = False if args.dsa_strategy in ['none', 'None'] else True
-
+    # args.dsa = False if args.dsa_strategy in ['none', 'None'] else True
+    args.dsa = False
     if not os.path.exists(args.data_path):
         os.mkdir(args.data_path)
 
     if not os.path.exists(args.save_path):
         os.mkdir(args.save_path)
 
-    eval_it_pool = np.arange(0, args.Iteration+1, 500).tolist() if args.eval_mode == 'S' or args.eval_mode == 'SS' else [args.Iteration] # The list of iterations when we evaluate models and record results.
+    eval_it_pool = np.arange(0, args.Iteration+1, 5000).tolist() if args.eval_mode == 'S' or args.eval_mode == 'SS' else [args.Iteration] # The list of iterations when we evaluate models and record results.
     print('eval_it_pool: ', eval_it_pool)
-    channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader = get_dataset(args.dataset, args.data_path)
+    style, channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader = get_dataset(args.dataset, args.data_path)
     model_eval_pool = get_eval_pool(args.eval_mode, args.model, args.model)
 
 
@@ -81,7 +82,7 @@ def main():
         optimizer_img = torch.optim.SGD([image_syn, ], lr=args.lr_img, momentum=0.5) # optimizer_img for synthetic data
         optimizer_img.zero_grad()
         print('%s training begins'%get_time())
-
+        acc_std = []
         for it in range(args.Iteration+1):
 
             ''' Evaluate synthetic data '''
@@ -94,34 +95,36 @@ def main():
 
                     accs = []
                     for it_eval in range(args.num_eval):
-                        net_eval = get_network(model_eval, channel, num_classes, im_size).to(args.device) # get a random model
+                        net_eval = get_network(model_eval, channel, num_classes, args.device, im_size).to(args.device) # get a random model
                         image_syn_eval, label_syn_eval = copy.deepcopy(image_syn.detach()), copy.deepcopy(label_syn.detach()) # avoid any unaware modification
                         _, acc_train, acc_test = evaluate_synset(it_eval, net_eval, image_syn_eval, label_syn_eval, testloader, args)
                         accs.append(acc_test)
                     print('Evaluate %d random %s, mean = %.4f std = %.4f\n-------------------------'%(len(accs), model_eval, np.mean(accs), np.std(accs)))
+                    acc_std.append((np.mean(accs), np.std(accs)))
 
                     if it == args.Iteration: # record the final results
                         accs_all_exps[model_eval] += accs
 
-                ''' visualize and save '''
-                save_name = os.path.join(args.save_path, 'vis_%s_%s_%s_%dipc_exp%d_iter%d.png'%(args.method, args.dataset, args.model, args.ipc, exp, it))
-                image_syn_vis = copy.deepcopy(image_syn.detach().cpu())
-                for ch in range(channel):
-                    image_syn_vis[:, ch] = image_syn_vis[:, ch]  * std[ch] + mean[ch]
-                image_syn_vis[image_syn_vis<0] = 0.0
-                image_syn_vis[image_syn_vis>1] = 1.0
-                save_image(image_syn_vis, save_name, nrow=args.ipc) # Trying normalize = True/False may get better visual effects.
+                if style == 'image':
+                    ''' visualize and save '''
+                    save_name = os.path.join(args.save_path, 'vis_%s_%s_%s_%dipc_exp%d_iter%d.png'%(args.method, args.dataset, args.model, args.ipc, exp, it))
+                    image_syn_vis = copy.deepcopy(image_syn.detach().cpu())
+                    for ch in range(channel):
+                        image_syn_vis[:, ch] = image_syn_vis[:, ch]  * std[ch] + mean[ch]
+                    image_syn_vis[image_syn_vis<0] = 0.0
+                    image_syn_vis[image_syn_vis>1] = 1.0
+                    save_image(image_syn_vis, save_name, nrow=args.ipc) # Trying normalize = True/False may get better visual effects.
 
 
 
             ''' Train synthetic data '''
-            net = get_network(args.model, channel, num_classes, im_size).to(args.device) # get a random model
+            net = get_network(args.model, channel, num_classes, args.device, im_size).to(args.device) # get a random model
             net.train()
             for param in list(net.parameters()):
                 param.requires_grad = False
 
-            embed = net.module.embed if torch.cuda.device_count() > 1 else net.embed # for GPU parallel
-            # embed = net.embed # for GPU parallel
+            # embed = net.module.embed if torch.cuda.device_count() > 1 else net.embed # for GPU parallel
+            embed = net.embed # for GPU parallel
 
 
             # TODO: change to our method
@@ -210,13 +213,12 @@ def main():
             if it == args.Iteration: # only record the final results
                 data_save.append([copy.deepcopy(image_syn.detach().cpu()), copy.deepcopy(label_syn.detach().cpu())])
                 torch.save({'data': data_save, 'accs_all_exps': accs_all_exps, }, os.path.join(args.save_path, 'res_%s_%s_%s_%dipc.pt'%(args.method, args.dataset, args.model, args.ipc)))
-
+        print(acc_std)
 
     print('\n==================== Final Results ====================\n')
     for key in model_eval_pool:
         accs = accs_all_exps[key]
         print('Run %d experiments, train on %s, evaluate %d random %s, mean  = %.2f%%  std = %.2f%%'%(args.num_exp, args.model, len(accs), key, np.mean(accs)*100, np.std(accs)*100))
-
 
 
 if __name__ == '__main__':

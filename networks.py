@@ -14,11 +14,20 @@ class Swish(nn.Module): # Swish(x) = x∗σ(x)
 
 ''' MLP '''
 class MLP(nn.Module):
-    def __init__(self, channel, num_classes):
+    def __init__(self, im_size, channel, num_classes):
         super(MLP, self).__init__()
-        self.fc_1 = nn.Linear(28*28*1 if channel==1 else 32*32*3, 128)
+        input_size = 1
+        for size in im_size:
+            input_size *= size
+        self.fc_1 = nn.Linear(input_size, 128)
         self.fc_2 = nn.Linear(128, 128)
         self.fc_3 = nn.Linear(128, num_classes)
+
+    def embed(self, x):
+        out = x.view(x.size(0), -1)
+        out = F.relu(self.fc_1(out))
+        out = F.relu(self.fc_2(out))
+        return out
 
     def forward(self, x):
         out = x.view(x.size(0), -1)

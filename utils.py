@@ -12,6 +12,7 @@ from networks import MLP, ConvNet, LeNet, AlexNet, AlexNetBN, VGG11, VGG11BN, Re
 
 def get_dataset(dataset, data_path):
     if dataset == 'MNIST':
+        style = 'image'
         channel = 1
         im_size = (28, 28)
         num_classes = 10
@@ -23,6 +24,7 @@ def get_dataset(dataset, data_path):
         class_names = [str(c) for c in range(num_classes)]
 
     elif dataset == 'FashionMNIST':
+        style = 'image'
         channel = 1
         im_size = (28, 28)
         num_classes = 10
@@ -34,6 +36,7 @@ def get_dataset(dataset, data_path):
         class_names = dst_train.classes
 
     elif dataset == 'SVHN':
+        style = 'image'
         channel = 3
         im_size = (32, 32)
         num_classes = 10
@@ -45,6 +48,7 @@ def get_dataset(dataset, data_path):
         class_names = [str(c) for c in range(num_classes)]
 
     elif dataset == 'CIFAR10':
+        style = 'image'
         channel = 3
         im_size = (32, 32)
         num_classes = 10
@@ -56,6 +60,7 @@ def get_dataset(dataset, data_path):
         class_names = dst_train.classes
 
     elif dataset == 'CIFAR100':
+        style = 'image'
         channel = 3
         im_size = (32, 32)
         num_classes = 100
@@ -67,6 +72,7 @@ def get_dataset(dataset, data_path):
         class_names = dst_train.classes
 
     elif dataset == 'TinyImageNet':
+        style = 'image'
         channel = 3
         im_size = (64, 64)
         num_classes = 200
@@ -93,13 +99,27 @@ def get_dataset(dataset, data_path):
             images_val[:, c] = (images_val[:, c] - mean[c]) / std[c]
 
         dst_test = TensorDataset(images_val, labels_val)  # no augmentation
+    elif dataset == 'MIMIC':
+        style = 'csv'
+        channel = 1
+        im_size = (1, 714)
+        num_classes = 2
+        class_names = None
+        mean = None
+        std = None
+        data_path = os.path.join(data_path, 'mimic')
+        x_train = torch.tensor(np.load(os.path.join(data_path, "x_train.npy")))
+        x_test = torch.tensor(np.load(os.path.join(data_path, "x_test.npy")))
+        y_train = torch.tensor(np.load(os.path.join(data_path, "y_train.npy")))
+        y_test = torch.tensor(np.load(os.path.join(data_path, "y_test.npy")))
+        dst_train = TensorDataset(x_train, y_train)
+        dst_test = TensorDataset(x_test, y_test)
 
     else:
         exit('unknown dataset: %s'%dataset)
 
-
     testloader = torch.utils.data.DataLoader(dst_test, batch_size=256, shuffle=False, num_workers=0)
-    return channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader
+    return style, channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader
 
 
 
@@ -122,12 +142,12 @@ def get_default_convnet_setting():
 
 
 
-def get_network(model, channel, num_classes, im_size=(32, 32)):
+def get_network(model, channel, num_classes, device, im_size=(32, 32)):
     torch.random.manual_seed(int(time.time() * 1000) % 100000)
     net_width, net_depth, net_act, net_norm, net_pooling = get_default_convnet_setting()
 
     if model == 'MLP':
-        net = MLP(channel=channel, num_classes=num_classes)
+        net = MLP(im_size=im_size,channel=channel, num_classes=num_classes)
     elif model == 'ConvNet':
         net = ConvNet(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=net_depth, net_act=net_act, net_norm=net_norm, net_pooling=net_pooling, im_size=im_size)
     elif model == 'LeNet':
@@ -198,13 +218,13 @@ def get_network(model, channel, num_classes, im_size=(32, 32)):
         net = None
         exit('unknown model: %s'%model)
 
-    gpu_num = torch.cuda.device_count()
-    if gpu_num>0:
-        device = 'cuda'
-        if gpu_num>1:
-            net = nn.DataParallel(net)
-    else:
-        device = 'cpu'
+    # gpu_num = torch.cuda.device_count()
+    # if gpu_num>0:
+    #     device = 'cuda'
+    #     if gpu_num>1:
+    #         net = nn.DataParallel(net)
+    # else:
+    #     device = 'cpu'
     net = net.to(device)
 
     return net
