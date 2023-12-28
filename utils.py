@@ -1,9 +1,11 @@
 import time
 import os
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ucimlrepo import fetch_ucirepo
 from torch.utils.data import Dataset
 from torchvision import datasets, transforms
 from scipy.ndimage.interpolation import rotate as scipyrotate
@@ -114,8 +116,56 @@ def get_dataset(dataset, data_path):
         # x_test = torch.tensor(np.load(os.path.join(data_path, "x_test.npy")))
         y_train = torch.tensor(np.load(os.path.join(data_path, "y_train.npy")))
         y_test = torch.tensor(np.load(os.path.join(data_path, "y_test.npy")))
+        print(x_train.shape)
+        print(y_train.shape)
         dst_train = TensorDataset(x_train, y_train)
         dst_test = TensorDataset(x_test, y_test)
+
+    elif dataset == 'COVERTYPE':
+        style = 'csv'
+        channel = 1
+        im_size = (1, 51)
+        num_classes = 7
+        class_names = None
+        mean = None
+        std = None
+        # fetch dataset
+        covertype = fetch_ucirepo(id=31)
+        # data (as pandas dataframes)
+        data = covertype.data.features
+        train = data.iloc[:len(data)-50000]
+        test = data.iloc[-50000:]
+        x_train = torch.tensor(train.iloc[:, :-1].values, dtype=torch.float)
+        y_train = torch.tensor(train.iloc[:, -1].values) - 1
+        x_test = torch.tensor(test.iloc[:, :-1].values, dtype=torch.float)
+        y_test = torch.tensor(test.iloc[:, -1].values) - 1
+        x_train = F.normalize(x_train, p=1, dim=0)
+        x_test = F.normalize(x_test, p=1, dim=0)
+        print(covertype.variables)
+        print(x_train.shape)
+        print(y_train.shape)
+        dst_train = TensorDataset(x_train, y_train)
+        dst_test = TensorDataset(x_test, y_test)
+
+    elif dataset == 'BANK':
+        style = 'csv'
+        channel = 1
+        im_size = (1, 16)
+        num_classes = 2
+        class_names = None
+        mean = None
+        std = None
+        bank_marketing = fetch_ucirepo(id=222)
+        # TODO: 数据处理
+
+        x = bank_marketing.data.features
+        y = bank_marketing.data.targets
+
+        # variable information
+        print(bank_marketing.variables)
+        print(x)
+        print(y)
+
 
     else:
         exit('unknown dataset: %s'%dataset)

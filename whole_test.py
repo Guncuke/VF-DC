@@ -60,7 +60,6 @@ num_epochs = 2000  # You can adjust this based on your needs
 net.to(device)  # Move the network to the GPU
 
 
-
 for epoch in range(num_epochs):
     running_loss = 0.0
     for i, data in enumerate(trainloader, 0):
