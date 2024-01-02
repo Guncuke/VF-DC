@@ -101,6 +101,8 @@ def get_dataset(dataset, data_path):
             images_val[:, c] = (images_val[:, c] - mean[c]) / std[c]
 
         dst_test = TensorDataset(images_val, labels_val)  # no augmentation
+
+    # OK
     elif dataset == 'MIMIC':
         style = 'csv'
         channel = 1
@@ -121,6 +123,7 @@ def get_dataset(dataset, data_path):
         dst_train = TensorDataset(x_train, y_train)
         dst_test = TensorDataset(x_test, y_test)
 
+    # BAD
     elif dataset == 'COVERTYPE':
         style = 'csv'
         channel = 1
@@ -141,31 +144,92 @@ def get_dataset(dataset, data_path):
         y_test = torch.tensor(test.iloc[:, -1].values) - 1
         x_train = F.normalize(x_train, p=1, dim=0)
         x_test = F.normalize(x_test, p=1, dim=0)
-        print(covertype.variables)
         print(x_train.shape)
         print(y_train.shape)
         dst_train = TensorDataset(x_train, y_train)
         dst_test = TensorDataset(x_test, y_test)
 
-    elif dataset == 'BANK':
+    # BAD
+    elif dataset == 'WINE':
         style = 'csv'
         channel = 1
-        im_size = (1, 16)
+        im_size = (1, 11)
+        num_classes = 10
+        class_names = None
+        mean = None
+        std = None
+        # fetch dataset
+        wine = fetch_ucirepo(id=186)
+        # data (as pandas dataframes)
+        x = wine.data.features
+        y = wine.data.targets
+        x_train = torch.tensor(x.iloc[:len(x)-500].values)
+        x_test = torch.tensor(x.iloc[-500:].values)
+        y_train = torch.tensor(y.iloc[:len(x)-500].values).squeeze()
+        y_test = torch.tensor(y.iloc[-500:].values).squeeze()
+        x_train = F.normalize(x_train, p=1, dim=0)
+        x_test = F.normalize(x_test, p=1, dim=0)
+        print(x_train.shape)
+        print(y_train.shape)
+        dst_train = TensorDataset(x_train, y_train)
+        dst_test = TensorDataset(x_test, y_test)
+
+    # just so so
+    elif dataset == 'CUSTOMER':
+        style = 'csv'
+        channel = 1
+        im_size = (1, 200)
         num_classes = 2
         class_names = None
         mean = None
         std = None
-        bank_marketing = fetch_ucirepo(id=222)
-        # TODO: 数据处理
 
-        x = bank_marketing.data.features
-        y = bank_marketing.data.targets
+        data_path = os.path.join(data_path, 'customer.csv')
+        data = pd.read_csv(data_path)
+        columes_to_drop = ['ID_code', 'target']
 
-        # variable information
-        print(bank_marketing.variables)
-        print(x)
-        print(y)
+        x = data.drop(columns=columes_to_drop, axis=1)
+        y = data.iloc[:,1]
+        x_train = x.iloc[:len(data) - 10000]
+        x_test = x.iloc[-10000:]
+        y_train = torch.tensor(y.iloc[:len(data) - 10000].values)
+        y_test = torch.tensor(y.iloc[-10000:].values)
+        x_train = F.normalize(torch.tensor(x_train.values), p=2, dim=0).float()
+        x_test = F.normalize(torch.tensor(x_test.values), p=2, dim=0).float()
+        print(x_train.shape)
+        print(y_train.shape)
+        dst_train = TensorDataset(x_train, y_train)
+        dst_test = TensorDataset(x_test, y_test)
 
+    elif dataset == 'MAGIC':
+        style = 'csv'
+        channel = 1
+        im_size = (1, 10)
+        num_classes = 2
+        class_names = None
+        mean = None
+        std = None
+        # fetch dataset
+        magic = fetch_ucirepo(id=159)
+        # data (as pandas dataframes)
+        x = magic.data.features
+        y = magic.data.targets
+        y = y.replace({'g':0, 'h':1})
+        x = torch.tensor(x.values)
+        y = torch.tensor(y.values).squeeze()
+        random_indices = torch.randperm(len(x))
+        x = x[random_indices]
+        y = y[random_indices]
+        y_train = y[:-2000]
+        y_test = y[-2000:]
+        x_train = x[:-2000]
+        x_test = x[-2000:]
+        # x_train = F.normalize(x[:-2000], p=1, dim=0)
+        # x_test = F.normalize(x[-2000:], p=1, dim=0)
+        print(x_train.shape)
+        print(y_train.shape)
+        dst_train = TensorDataset(x_train, y_train)
+        dst_test = TensorDataset(x_test, y_test)
 
     else:
         exit('unknown dataset: %s'%dataset)
@@ -199,7 +263,7 @@ def get_network(model, channel, num_classes, device, im_size=(32, 32)):
     net_width, net_depth, net_act, net_norm, net_pooling = get_default_convnet_setting()
 
     if model == 'MLP':
-        net = MLP(im_size=im_size,channel=channel, num_classes=num_classes)
+        net = MLP(im_size=im_size, num_classes=num_classes)
     elif model == 'ConvNet':
         net = ConvNet(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=net_depth, net_act=net_act, net_norm=net_norm, net_pooling=net_pooling, im_size=im_size)
     elif model == 'LeNet':
@@ -416,7 +480,6 @@ def evaluate_synset(it_eval, net, images_train, labels_train, testloader, args):
     lr_schedule = [Epoch//2+1]
     optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=0.0005)
     criterion = nn.CrossEntropyLoss().to(args.device)
-
     dst_train = TensorDataset(images_train, labels_train)
     trainloader = torch.utils.data.DataLoader(dst_train, batch_size=args.batch_train, shuffle=True, num_workers=0)
 
