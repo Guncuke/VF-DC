@@ -14,13 +14,13 @@ def main():
     parser = argparse.ArgumentParser(description='Parameter Processing')
     parser.add_argument('--dataset', type=str, default='MAGIC', help='dataset')
     parser.add_argument('--model', type=str, default='MLP', help='model')
-    parser.add_argument('--ipc', type=int, default=50, help='image(s) per class')
+    parser.add_argument('--ipc', type=int, default=100, help='image(s) per class')
     parser.add_argument('--eval_mode', type=str, default='SS', help='eval_mode') # S: the same to training model, M: multi architectures,  W: net width, D: net depth, A: activation function, P: pooling layer, N: normalization layer,
     parser.add_argument('--num_exp', type=int, default=1, help='the number of experiments')
     parser.add_argument('--num_eval', type=int, default=20, help='the number of evaluating randomly initialized models')
     parser.add_argument('--epoch_eval_train', type=int, default=1000, help='epochs to train a model with synthetic data') # it can be small for speeding up with little performance drop
-    parser.add_argument('--Iteration', type=int, default=15000, help='training iterations')
-    parser.add_argument('--lr_img', type=float, default=0.1, help='learning rate for updating synthetic images')
+    parser.add_argument('--Iteration', type=int, default=20000, help='training iterations')
+    parser.add_argument('--lr_img', type=float, default=1, help='learning rate for updating synthetic images')
     parser.add_argument('--lr_net', type=float, default=0.01, help='learning rate for updating network parameters')
     parser.add_argument('--batch_real', type=int, default=2560, help='batch size for real data')
     parser.add_argument('--batch_train', type=int, default=256, help='batch size for training networks')

@@ -36,8 +36,8 @@ class MLP(nn.Module):
     def embed(self, x):
         out = x.view(x.size(0), -1)
         out = F.relu(self.fc_1(out))
-        out = F.relu(self.fc_2(out))
-        out = self.fc_3(out)
+        out = self.fc_2(out)
+        # out = self.fc_3(out)
         return out
 
     def forward(self, x):
