@@ -102,6 +102,70 @@ def get_dataset(dataset, data_path):
 
         dst_test = TensorDataset(images_val, labels_val)  # no augmentation
 
+    elif dataset == 'BEAN':
+        style = 'csv'
+        channel = 1
+        im_size = (1, 16)
+        num_classes = 7
+        class_names = None
+        mean = None
+        std = None
+
+        # fetch dataset
+        dry_bean_dataset = fetch_ucirepo(id=602)
+
+        # data (as pandas dataframes)
+        x = dry_bean_dataset.data.features
+        y = dry_bean_dataset.data.targets
+        y['Class'] = pd.factorize(y['Class'])[0]
+        print(y['Class'].nunique())
+        x = torch.tensor(x.values)
+        y = torch.tensor(y.values).squeeze()
+        random_indices = torch.randperm(len(x))
+        x = x[random_indices]
+        y = y[random_indices]
+        y_train = y[:-1200]
+        y_test = y[-1200:]
+        x_train = x[:-1200]
+        x_test = x[-1200:]
+        x_train = F.normalize(x_train, p=2, dim=0)
+        x_test = F.normalize(x_test, p=2, dim=0)
+        print(x_train.shape)
+        print(y_train.shape)
+        dst_train = TensorDataset(x_train, y_train)
+        dst_test = TensorDataset(x_test, y_test)
+
+    elif dataset == 'Breast':
+        style = 'csv'
+        channel = 1
+        im_size = (1, 30)
+        num_classes = 2
+        class_names = None
+        mean = None
+        std = None
+        # fetch dataset
+        breast_cancer_wisconsin_diagnostic = fetch_ucirepo(id=17)
+
+        # data (as pandas dataframes)
+        x = breast_cancer_wisconsin_diagnostic.data.features
+        y = breast_cancer_wisconsin_diagnostic.data.targets
+        y = y.replace({'M': 0, 'B': 1})
+        x = torch.tensor(x.values)
+        y = torch.tensor(y.values).squeeze()
+        random_indices = torch.randperm(len(x))
+        x = x[random_indices]
+        y = y[random_indices]
+        y_train = y[:-69]
+        y_test = y[-69:]
+        x_train = x[:-69]
+        x_test = x[-69:]
+        x_train = F.normalize(x_train, p=2, dim=0)
+        x_test = F.normalize(x_test, p=2, dim=0)
+        print(x_train.shape)
+        print(y_train.shape)
+        dst_train = TensorDataset(x_train, y_train)
+        dst_test = TensorDataset(x_test, y_test)
+
     # OK
     elif dataset == 'MIMIC':
         style = 'csv'
@@ -123,52 +187,33 @@ def get_dataset(dataset, data_path):
         dst_train = TensorDataset(x_train, y_train)
         dst_test = TensorDataset(x_test, y_test)
 
-    # BAD
-    elif dataset == 'COVERTYPE':
+    # OK
+    elif dataset == 'Spambase':
         style = 'csv'
         channel = 1
-        im_size = (1, 51)
-        num_classes = 7
+        im_size = (1, 57)
+        num_classes = 2
         class_names = None
         mean = None
         std = None
-        # fetch dataset
-        covertype = fetch_ucirepo(id=31)
-        # data (as pandas dataframes)
-        data = covertype.data.features
-        train = data.iloc[:len(data)-50000]
-        test = data.iloc[-50000:]
-        x_train = torch.tensor(train.iloc[:, :-1].values, dtype=torch.float)
-        y_train = torch.tensor(train.iloc[:, -1].values) - 1
-        x_test = torch.tensor(test.iloc[:, :-1].values, dtype=torch.float)
-        y_test = torch.tensor(test.iloc[:, -1].values) - 1
-        x_train = F.normalize(x_train, p=1, dim=0)
-        x_test = F.normalize(x_test, p=1, dim=0)
-        print(x_train.shape)
-        print(y_train.shape)
-        dst_train = TensorDataset(x_train, y_train)
-        dst_test = TensorDataset(x_test, y_test)
+        spambase = fetch_ucirepo(id=94)
 
-    # BAD
-    elif dataset == 'WINE':
-        style = 'csv'
-        channel = 1
-        im_size = (1, 11)
-        num_classes = 10
-        class_names = None
-        mean = None
-        std = None
-        # fetch dataset
-        wine = fetch_ucirepo(id=186)
         # data (as pandas dataframes)
-        x = wine.data.features
-        y = wine.data.targets
-        x_train = torch.tensor(x.iloc[:len(x)-500].values)
-        x_test = torch.tensor(x.iloc[-500:].values)
-        y_train = torch.tensor(y.iloc[:len(x)-500].values).squeeze()
-        y_test = torch.tensor(y.iloc[-500:].values).squeeze()
-        x_train = F.normalize(x_train, p=1, dim=0)
-        x_test = F.normalize(x_test, p=1, dim=0)
+        x = spambase.data.features
+        y = spambase.data.targets
+        x = torch.tensor(x.values)
+        y = torch.tensor(y.values).squeeze()
+        random_indices = torch.randperm(len(x))
+        x = x[random_indices]
+        y = y[random_indices]
+        y_train = y[:-300]
+        y_test = y[-300:]
+        x_train = x[:-300]
+        x_test = x[-300:]
+        # x_train = F.normalize(x[:-2000], p=1, dim=0)
+        # x_test = F.normalize(x[-2000:], p=1, dim=0)
+        x_train = F.normalize(x_train, p=2, dim=0)
+        x_test = F.normalize(x_test, p=2, dim=0)
         print(x_train.shape)
         print(y_train.shape)
         dst_train = TensorDataset(x_train, y_train)
@@ -194,8 +239,10 @@ def get_dataset(dataset, data_path):
         x_test = x.iloc[-10000:]
         y_train = torch.tensor(y.iloc[:len(data) - 10000].values)
         y_test = torch.tensor(y.iloc[-10000:].values)
-        x_train = F.normalize(torch.tensor(x_train.values), p=2, dim=0).float()
-        x_test = F.normalize(torch.tensor(x_test.values), p=2, dim=0).float()
+        # x_train = F.normalize(torch.tensor(x_train.values), p=2, dim=0).float()
+        # x_test = F.normalize(torch.tensor(x_test.values), p=2, dim=0).float()
+        x_train = torch.tensor(x_train.values).float()
+        x_test = torch.tensor(x_test.values).float()
         print(x_train.shape)
         print(y_train.shape)
         dst_train = TensorDataset(x_train, y_train)
@@ -224,8 +271,8 @@ def get_dataset(dataset, data_path):
         y_test = y[-2000:]
         x_train = x[:-2000]
         x_test = x[-2000:]
-        # x_train = F.normalize(x[:-2000], p=1, dim=0)
-        # x_test = F.normalize(x[-2000:], p=1, dim=0)
+        x_train = F.normalize(x_train, p=2, dim=0)
+        x_test = F.normalize(x_test, p=2, dim=0)
         print(x_train.shape)
         print(y_train.shape)
         dst_train = TensorDataset(x_train, y_train)

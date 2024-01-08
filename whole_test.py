@@ -5,6 +5,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 import torch
 import numpy as np
+from ucimlrepo import fetch_ucirepo
 import os
 
 class TensorDataset(Dataset):
@@ -23,7 +24,7 @@ gpu_num = 3
 torch.cuda.set_device(gpu_num)
 device = torch.device('cuda:{}'.format(gpu_num))
 
-net = get_network('MLP', 1, 2, device, im_size=(1, 200))
+net = get_network('MLP', 1, 2, device, im_size=(1, 30))
 
 # data_path = os.path.join('data', 'mimic')
 # # x_train = torch.tensor(np.load(os.path.join(data_path, "x_train.npy"))).to(device)
@@ -45,19 +46,42 @@ net = get_network('MLP', 1, 2, device, im_size=(1, 200))
 # dst_train = TensorDataset(x_train, y_train)
 # dst_test = TensorDataset(x_test, y_test)
 
-data_path = os.path.join('data', 'customer.csv')
-data = pd.read_csv(data_path)
-columes_to_drop = ['ID_code', 'target']
+# data_path = os.path.join('data', 'customer.csv')
+# data = pd.read_csv(data_path)
+# columes_to_drop = ['ID_code', 'target']
+#
+# x = data.drop(columns=columes_to_drop, axis=1)
+# y = data.iloc[:,1]
+# x_train = x.iloc[:len(data) - 10000]
+# x_test = x.iloc[-10000:]
+# y_train = torch.tensor(y.iloc[:len(data) - 10000].values)
+# y_test = torch.tensor(y.iloc[-10000:].values)
+# x_train = F.normalize(torch.tensor(x_train.values), p=2, dim=0)
+# x_test = F.normalize(torch.tensor(x_test.values, dtype=torch.float), p=2, dim=0)
+# # print(y_train.shape)
+# dst_train = TensorDataset(x_train, y_train)
+# dst_test = TensorDataset(x_test, y_test)
+# fetch dataset
+# fetch dataset
+breast_cancer_wisconsin_diagnostic = fetch_ucirepo(id=17)
 
-x = data.drop(columns=columes_to_drop, axis=1)
-y = data.iloc[:,1]
-x_train = x.iloc[:len(data) - 10000]
-x_test = x.iloc[-10000:]
-y_train = torch.tensor(y.iloc[:len(data) - 10000].values)
-y_test = torch.tensor(y.iloc[-10000:].values)
-x_train = F.normalize(torch.tensor(x_train.values), p=2, dim=0)
-x_test = F.normalize(torch.tensor(x_test.values, dtype=torch.float), p=2, dim=0)
-# print(y_train.shape)
+# data (as pandas dataframes)
+x = breast_cancer_wisconsin_diagnostic.data.features
+y = breast_cancer_wisconsin_diagnostic.data.targets
+y = y.replace({'M': 0, 'B': 1})
+x = torch.tensor(x.values)
+y = torch.tensor(y.values).squeeze()
+random_indices = torch.randperm(len(x))
+x = x[random_indices]
+y = y[random_indices]
+y_train = y[:-69]
+y_test = y[-69:]
+x_train = x[:-69]
+x_test = x[-69:]
+x_train = F.normalize(x_train, p=2, dim=0).float()
+x_test = F.normalize(x_test, p=2, dim=0).float()
+print(x_train.shape)
+print(y_train.shape)
 dst_train = TensorDataset(x_train, y_train)
 dst_test = TensorDataset(x_test, y_test)
 
@@ -68,13 +92,12 @@ testloader = torch.utils.data.DataLoader(dst_test, batch_size=256, shuffle=False
 criterion = torch.nn.CrossEntropyLoss()
 
 # Assuming you have already defined your optimizer, for example, SGD
-optimizer = optim.SGD(net.parameters(), lr=0.01, momentum=0.9)
+optimizer = optim.SGD(net.parameters(), lr=0.01)
 
 # Training loop
-num_epochs = 1000  # You can adjust this based on your needs
+num_epochs = 10000  # You can adjust this based on your needs
 
 net.to(device)  # Move the network to the GPU
-
 
 for epoch in range(num_epochs):
     running_loss = 0.0
@@ -93,7 +116,7 @@ for epoch in range(num_epochs):
 
     # Print statistics
     if epoch % 10 == 9:  # Print every 10 mini-batches
-        print(f'epoch:{epoch}')
+        print(f'epoch:{epoch}:{loss.item()}')
 
 output = net(x_test.to(device))
 print(output.shape)

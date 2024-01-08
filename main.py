@@ -5,6 +5,7 @@ import argparse
 import numpy as np
 import torch
 import pandas as pd
+from quantize_dequantize import quantize_and_dequantize
 from torchvision.utils import save_image
 from utils import get_dataset, get_network, get_eval_pool, evaluate_synset, get_time, TensorDataset, DiffAugment, ParamDiffAug
 
@@ -12,22 +13,24 @@ from utils import get_dataset, get_network, get_eval_pool, evaluate_synset, get_
 def main():
 
     parser = argparse.ArgumentParser(description='Parameter Processing')
-    parser.add_argument('--dataset', type=str, default='MAGIC', help='dataset')
+    parser.add_argument('--dataset', type=str, default='Spambase', help='dataset')
     parser.add_argument('--model', type=str, default='MLP', help='model')
-    parser.add_argument('--ipc', type=int, default=100, help='image(s) per class')
+    parser.add_argument('--ipc', type=int, default=50, help='sample(s) per class')
     parser.add_argument('--eval_mode', type=str, default='SS', help='eval_mode') # S: the same to training model, M: multi architectures,  W: net width, D: net depth, A: activation function, P: pooling layer, N: normalization layer,
     parser.add_argument('--num_exp', type=int, default=1, help='the number of experiments')
     parser.add_argument('--num_eval', type=int, default=20, help='the number of evaluating randomly initialized models')
-    parser.add_argument('--epoch_eval_train', type=int, default=1000, help='epochs to train a model with synthetic data') # it can be small for speeding up with little performance drop
-    parser.add_argument('--Iteration', type=int, default=20000, help='training iterations')
-    parser.add_argument('--lr_img', type=float, default=1, help='learning rate for updating synthetic images')
+    parser.add_argument('--epoch_eval_train', type=int, default=2000, help='epochs to train a model with synthetic data') # it can be small for speeding up with little performance drop
+    parser.add_argument('--Iteration', type=int, default=15000, help='training iterations')
+    parser.add_argument('--lr_img', type=float, default=0.5, help='learning rate for updating synthetic datas')
     parser.add_argument('--lr_net', type=float, default=0.01, help='learning rate for updating network parameters')
-    parser.add_argument('--batch_real', type=int, default=2560, help='batch size for real data')
-    parser.add_argument('--batch_train', type=int, default=256, help='batch size for training networks')
+    parser.add_argument('--batch_real', type=int, default=512, help='batch size for real data')
+    parser.add_argument('--batch_train', type=int, default=512, help='batch size for training networks')
     parser.add_argument('--dsa_strategy', type=str, default='color_crop_cutout_flip_scale_rotate', help='differentiable Siamese augmentation strategy')
     parser.add_argument('--data_path', type=str, default='data', help='dataset path')
     parser.add_argument('--save_path', type=str, default='result', help='path to save results')
     parser.add_argument('--gpu_num', type=int, default=1, help='use witch card')
+    parser.add_argument('--encrypt', type=bool, default=True, help='encryption or not')
+
 
     args = parser.parse_args()
     args.method = 'DM'
@@ -69,8 +72,8 @@ def main():
         # images_all = torch.cat(images_all, dim=0).to(args.device)
         # labels_all = torch.tensor(labels_all, dtype=torch.long, device=args.device)
 
-        images_all = torch.cat(images_all, dim=0)
-        labels_all = torch.tensor(labels_all, dtype=torch.long)
+        images_all = torch.cat(images_all, dim=0).to(args.device)
+        labels_all = torch.tensor(labels_all, dtype=torch.long).to(args.device)
 
         indices_class = [[] for c in range(num_classes)]
         for i, lab in enumerate(labels_all):
@@ -90,7 +93,7 @@ def main():
         acc_std = []
         for it in range(args.Iteration+1):
             ''' Evaluate synthetic data '''
-            if it in eval_it_pool[:]:
+            if it in eval_it_pool[14:]:
                 for model_eval in model_eval_pool:
                     print('-------------------------\nEvaluation\nmodel_train = %s, model_eval = %s, iteration = %d'%(args.model, model_eval, it))
 
@@ -144,9 +147,17 @@ def main():
             images_all = images_all[perm_indices]
             labels_all = labels_all[perm_indices]
 
-            for i in range(len(images_all) // batch_size):
-                start_index = i * batch_size
-                end_index = (i + 1) * batch_size
+            for i in range(len(images_all) // batch_size + 1):
+                if i == len(images_all) // batch_size:
+                    residual = len(images_all) - i * batch_size
+                    if residual == 0:
+                        continue
+                    else:
+                        start_index = i * batch_size
+                        end_index = len(images_all)
+                else:
+                    start_index = i * batch_size
+                    end_index = (i + 1) * batch_size
 
                 """ 
                 ================step 1=====================
@@ -161,13 +172,15 @@ def main():
 
                 output_real = embed(img_real).detach()
 
+
                 """
                 ================step 2=====================
                             p0计算每一个类的掩码
                 ===========================================
                 """
                 label_real = labels_all[start_index: end_index]
-                mask = torch.zeros((num_classes, batch_size), dtype=torch.bool)
+                mask = torch.zeros((num_classes, end_index-start_index), dtype=torch.bool)
+
                 for index, label in enumerate(label_real):
                     label = label.to('cpu')
                     mask[label][index] = True
@@ -188,6 +201,8 @@ def main():
                     output_real_classes_mean.append(output_real_class_mean)
                 output_real_classes_mean = torch.stack(output_real_classes_mean)
 
+                valid_row = ~torch.isnan(output_real_classes_mean).any(dim=1)
+
                 """
                 ================step 4=====================
                   p1再次计算浓缩数据集的embedding，传递给P0
@@ -201,11 +216,24 @@ def main():
                 """
                 ================step 5=====================
                   p0 根据收集到的原始数据的avg_embed和生成数据的embed
+                  这里有时候batch里可能没有这个类，这时候对应的行就是nan
+                  剔除是nan的类别，不计算损失。
                   计算梯度
                 ===========================================
                 """
-                # 这里偷懒了，直接就类0~n直接按顺序排下来
-                loss = torch.sum((output_real_classes_mean - torch.mean(output_syn.reshape(num_classes, args.ipc, -1), dim=1)) ** 2)
+
+                # 主动方选择浓缩数据集的标签，可以打混，为了代码方便，这里直接按顺序排下来
+                output_syn_classes = output_syn.reshape(num_classes, args.ipc, -1)
+                output_syn_classes_mean = torch.mean(output_syn_classes, dim=1)
+
+                output_syn_classes_mean_without_nan = output_syn_classes_mean[valid_row]
+                output_real_classes_mean_without_nan = output_real_classes_mean[valid_row]
+
+                if args.encrypt:
+                    output_real_classes_mean_without_nan = quantize_and_dequantize(output_real_classes_mean_without_nan, 32)
+                    output_syn_classes_mean_without_nan = quantize_and_dequantize(output_syn_classes_mean_without_nan, 32)
+
+                loss = torch.sum((output_real_classes_mean_without_nan - output_syn_classes_mean_without_nan) ** 2)
 
                 """
                 ================step 6=====================
