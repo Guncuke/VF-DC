@@ -27,10 +27,10 @@ def main():
     parser.add_argument('--dsa_strategy', type=str, default='color_crop_cutout_flip_scale_rotate', help='differentiable Siamese augmentation strategy')
     parser.add_argument('--data_path', type=str, default='data', help='dataset path')
     parser.add_argument('--save_path', type=str, default='result', help='path to save results')
-    parser.add_argument('--gpu_num', type=int, default=2, help='use witch card')
+    parser.add_argument('--gpu_num', type=int, default=1, help='use witch card')
     parser.add_argument('--encrypt', type=bool, default=True, help='encryption or not')
-    parser.add_argument('--bits', type=int, default=16, help='secret sharing bits')
-    parser.add_argument('--noise', type=bool, default=False, help='Gauss noise')
+    parser.add_argument('--bits', type=int, default=32, help='secret sharing bits')
+    parser.add_argument('--noise', type=bool, default=True, help='Gauss noise')
     parser.add_argument('--noise_scale', type=float, default=1, help='see in paper')
 
     args = parser.parse_args()
@@ -250,9 +250,8 @@ def main():
                     # 不知道是不是因为改变了计算图，加上之后Loss无法下降，但是理论上应该不变
                     # 因为输出观察的话，float32的前20位基本保持相同
                     # 所以目前仅对 output_real_classes_mean_without_nan加密，不影响性能
-                    output_syn_classes_mean_without_nan = quantize_and_dequantize(output_syn_classes_mean_without_nan,
-                                                                                  args.bits)
-
+                    # output_syn_classes_mean_without_nan = quantize_and_dequantize(output_syn_classes_mean_without_nan,
+                    #                                                               args.bits)
 
                 loss = torch.sum((output_real_classes_mean_without_nan - output_syn_classes_mean_without_nan) ** 2)
 
