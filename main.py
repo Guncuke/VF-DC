@@ -5,32 +5,33 @@ import argparse
 import numpy as np
 import torch
 import pandas as pd
-from quantize_dequantize import quantize_and_dequantize
 from torchvision.utils import save_image
-from utils import get_dataset, get_network, get_eval_pool, evaluate_synset, get_time, TensorDataset, DiffAugment, ParamDiffAug
+from utils import get_dataset, get_network, get_eval_pool, evaluate_synset, get_time, DiffAugment, ParamDiffAug, quantize_and_dequantize
 
 
 def main():
 
     parser = argparse.ArgumentParser(description='Parameter Processing')
-    parser.add_argument('--dataset', type=str, default='Spambase', help='dataset')
+    parser.add_argument('--dataset', type=str, default='MIMIC', help='dataset')
     parser.add_argument('--model', type=str, default='MLP', help='model')
-    parser.add_argument('--ipc', type=int, default=50, help='sample(s) per class')
+    parser.add_argument('--ipc', type=int, default=100, help='sample(s) per class')
     parser.add_argument('--eval_mode', type=str, default='SS', help='eval_mode') # S: the same to training model, M: multi architectures,  W: net width, D: net depth, A: activation function, P: pooling layer, N: normalization layer,
     parser.add_argument('--num_exp', type=int, default=1, help='the number of experiments')
     parser.add_argument('--num_eval', type=int, default=20, help='the number of evaluating randomly initialized models')
     parser.add_argument('--epoch_eval_train', type=int, default=2000, help='epochs to train a model with synthetic data') # it can be small for speeding up with little performance drop
     parser.add_argument('--Iteration', type=int, default=15000, help='training iterations')
-    parser.add_argument('--lr_img', type=float, default=0.5, help='learning rate for updating synthetic datas')
+    parser.add_argument('--lr_img', type=float, default=1, help='learning rate for updating synthetic datas')
     parser.add_argument('--lr_net', type=float, default=0.01, help='learning rate for updating network parameters')
-    parser.add_argument('--batch_real', type=int, default=512, help='batch size for real data')
-    parser.add_argument('--batch_train', type=int, default=512, help='batch size for training networks')
+    parser.add_argument('--batch_real', type=int, default=2048, help='batch size for real data')
+    parser.add_argument('--batch_train', type=int, default=256, help='batch size for training networks')
     parser.add_argument('--dsa_strategy', type=str, default='color_crop_cutout_flip_scale_rotate', help='differentiable Siamese augmentation strategy')
     parser.add_argument('--data_path', type=str, default='data', help='dataset path')
     parser.add_argument('--save_path', type=str, default='result', help='path to save results')
-    parser.add_argument('--gpu_num', type=int, default=1, help='use witch card')
+    parser.add_argument('--gpu_num', type=int, default=2, help='use witch card')
     parser.add_argument('--encrypt', type=bool, default=True, help='encryption or not')
-
+    parser.add_argument('--bits', type=int, default=16, help='secret sharing bits')
+    parser.add_argument('--noise', type=bool, default=False, help='Gauss noise')
+    parser.add_argument('--noise_scale', type=float, default=1, help='see in paper')
 
     args = parser.parse_args()
     args.method = 'DM'
@@ -93,7 +94,7 @@ def main():
         acc_std = []
         for it in range(args.Iteration+1):
             ''' Evaluate synthetic data '''
-            if it in eval_it_pool[14:]:
+            if it in eval_it_pool[10:]:
                 for model_eval in model_eval_pool:
                     print('-------------------------\nEvaluation\nmodel_train = %s, model_eval = %s, iteration = %d'%(args.model, model_eval, it))
 
@@ -172,7 +173,6 @@ def main():
 
                 output_real = embed(img_real).detach()
 
-
                 """
                 ================step 2=====================
                             p0计算每一个类的掩码
@@ -201,6 +201,19 @@ def main():
                     output_real_classes_mean.append(output_real_class_mean)
                 output_real_classes_mean = torch.stack(output_real_classes_mean)
 
+
+                """
+                添加噪声
+                """
+                if args.noise:
+                    d = torch.tensor(output_real.shape[1], dtype=torch.float)
+                    delta = torch.tensor(0.001, dtype=torch.float)
+                    n = torch.tensor(args.batch_real, dtype=torch.float)
+                    epsilon = torch.tensor(args.noise_scale, dtype=torch.float)
+                    sigma = torch.sqrt(2*d*torch.log(1.25/delta))/(n*epsilon)
+                    noise = torch.randn_like(output_real_classes_mean) * sigma
+                    output_real_classes_mean += noise
+
                 valid_row = ~torch.isnan(output_real_classes_mean).any(dim=1)
 
                 """
@@ -217,7 +230,7 @@ def main():
                 ================step 5=====================
                   p0 根据收集到的原始数据的avg_embed和生成数据的embed
                   这里有时候batch里可能没有这个类，这时候对应的行就是nan
-                  剔除是nan的类别，不计算损失。
+                  剔除是nan的类！不计算损失！
                   计算梯度
                 ===========================================
                 """
@@ -230,8 +243,16 @@ def main():
                 output_real_classes_mean_without_nan = output_real_classes_mean[valid_row]
 
                 if args.encrypt:
-                    output_real_classes_mean_without_nan = quantize_and_dequantize(output_real_classes_mean_without_nan, 32)
-                    output_syn_classes_mean_without_nan = quantize_and_dequantize(output_syn_classes_mean_without_nan, 32)
+
+                    output_real_classes_mean_without_nan = quantize_and_dequantize(output_real_classes_mean_without_nan,
+                                                                                   args.bits).detach()
+
+                    # 不知道是不是因为改变了计算图，加上之后Loss无法下降，但是理论上应该不变
+                    # 因为输出观察的话，float32的前20位基本保持相同
+                    # 所以目前仅对 output_real_classes_mean_without_nan加密，不影响性能
+                    output_syn_classes_mean_without_nan = quantize_and_dequantize(output_syn_classes_mean_without_nan,
+                                                                                  args.bits)
+
 
                 loss = torch.sum((output_real_classes_mean_without_nan - output_syn_classes_mean_without_nan) ** 2)
 

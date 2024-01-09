@@ -74,10 +74,10 @@ y = torch.tensor(y.values).squeeze()
 random_indices = torch.randperm(len(x))
 x = x[random_indices]
 y = y[random_indices]
-y_train = y[:-69]
-y_test = y[-69:]
-x_train = x[:-69]
-x_test = x[-69:]
+y_train = y[:-30].clone()
+y_test = y[-30:].clone()
+x_train = x[:-30].clone()
+x_test = x[-30:].clone()
 x_train = F.normalize(x_train, p=2, dim=0).float()
 x_test = F.normalize(x_test, p=2, dim=0).float()
 print(x_train.shape)
@@ -85,14 +85,14 @@ print(y_train.shape)
 dst_train = TensorDataset(x_train, y_train)
 dst_test = TensorDataset(x_test, y_test)
 
-trainloader = torch.utils.data.DataLoader(dst_train, batch_size=256, shuffle=True, num_workers=0)
+trainloader = torch.utils.data.DataLoader(dst_train, batch_size=512, shuffle=True, num_workers=0)
 testloader = torch.utils.data.DataLoader(dst_test, batch_size=256, shuffle=False, num_workers=0)
 
 # Assuming you have a classification task, you can use CrossEntropyLoss as the loss function
 criterion = torch.nn.CrossEntropyLoss()
 
 # Assuming you have already defined your optimizer, for example, SGD
-optimizer = optim.SGD(net.parameters(), lr=0.01)
+optimizer = optim.SGD(net.parameters(), lr=0.01, momentum=0.9)
 
 # Training loop
 num_epochs = 10000  # You can adjust this based on your needs

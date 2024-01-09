@@ -464,6 +464,16 @@ def evaluate_synset(it_eval, net, images_train, labels_train, testloader, args):
     return net, acc_train, acc_test
 
 
+def quantize_and_dequantize(tensor, bits):
+
+    tensor_t = tensor.double()
+    min_val, max_val = tensor_t.min(dim=1)[0].unsqueeze(1), tensor_t.max(dim=1)[0].unsqueeze(1)
+    scale = ((2**bits - 1) / (max_val - min_val))
+    quantized = torch.round((tensor - min_val) * scale).long()
+    # 反量化
+    dequantized = (quantized.double() / scale + min_val).float()
+    return dequantized
+
 
 def augment(images, dc_aug_param, device):
     # This can be sped up in the future.

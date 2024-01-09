@@ -3,31 +3,27 @@
 
 import torch
 
+torch.set_printoptions(precision=20)
 def quantize_and_dequantize(tensor, bits):
-    torch.manual_seed(42)
-    min_val, max_val = tensor.min(), tensor.max()
-    scale = (2**bits - 1) / (max_val - min_val)
-    quantized = torch.round((tensor - min_val) * scale).int()
-    
+
+    min_val, max_val = tensor.min(dim=1)[0].unsqueeze(1), tensor.max(dim=1)[0].unsqueeze(1)
+    scale = ((2**bits - 1) / (max_val - min_val))
+    quantized = ((tensor - min_val) * scale).long()
     # 反量化
     dequantized = quantized.float() / scale + min_val
     return dequantized
 
-# # # 示例
-# d = 128  # embedding维度
-# l = 8    # 比特数
-#
-# # 生成一个随机的浮点型embedding
-# embedding = torch.randn((5, 10))
-#
-# # 量化并反量化
-# processed_embedding = quantize_and_dequantize(embedding, l)
-#
-# # 查看原始和处理后的embedding
-# print("Original embedding:", embedding)
-# print("Processed embedding:", processed_embedding)
-# print(quantize_and_dequantize(embedding[2], l))
+# 示例
+d = 128  # embedding维度
+l = 32    # 比特数
 
+# 生成一个随机的浮点型embedding
+embedding = torch.randn((1, 10))
 
+# 量化并反量化
+processed_embedding = quantize_and_dequantize(embedding, l)
 
-
+# 查看原始和处理后的embedding
+print("Original embedding:", embedding)
+print("Processed embedding:", processed_embedding)
+print(embedding-processed_embedding)
