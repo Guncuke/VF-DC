@@ -6,6 +6,8 @@ import torch.nn.functional as F
 import torch
 import numpy as np
 from ucimlrepo import fetch_ucirepo
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 import os
 
 class TensorDataset(Dataset):
@@ -64,29 +66,25 @@ net = get_network('MLP', 1, 2, device, im_size=(1, 30))
 # fetch dataset
 # fetch dataset
 breast_cancer_wisconsin_diagnostic = fetch_ucirepo(id=17)
-
 # data (as pandas dataframes)
-x = breast_cancer_wisconsin_diagnostic.data.features
+X = breast_cancer_wisconsin_diagnostic.data.features.values
 y = breast_cancer_wisconsin_diagnostic.data.targets
 y = y.replace({'M': 0, 'B': 1})
-x = torch.tensor(x.values)
-y = torch.tensor(y.values).squeeze()
-random_indices = torch.randperm(len(x))
-x = x[random_indices]
-y = y[random_indices]
-y_train = y[:-30].clone()
-y_test = y[-30:].clone()
-x_train = x[:-30].clone()
-x_test = x[-30:].clone()
-x_train = F.normalize(x_train, p=2, dim=0).float()
-x_test = F.normalize(x_test, p=2, dim=0).float()
-print(x_train.shape)
-print(y_train.shape)
-dst_train = TensorDataset(x_train, y_train)
-dst_test = TensorDataset(x_test, y_test)
+y = y.values
+# 数据预处理：标准化
+scaler = StandardScaler()
+X = scaler.fit_transform(X)
+# 划分数据集
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+# 转换为PyTorch的张量
+X_train = torch.FloatTensor(X_train).to(device)
+y_train = torch.LongTensor(y_train.squeeze()).to(device)
+X_test = torch.FloatTensor(X_test).to(device)
+y_test = torch.LongTensor(y_test.squeeze()).to(device)
 
-trainloader = torch.utils.data.DataLoader(dst_train, batch_size=512, shuffle=True, num_workers=0)
-testloader = torch.utils.data.DataLoader(dst_test, batch_size=256, shuffle=False, num_workers=0)
+dst_train = TensorDataset(X_train, y_train)
+dst_test = TensorDataset(X_test, y_test)
+
 
 # Assuming you have a classification task, you can use CrossEntropyLoss as the loss function
 criterion = torch.nn.CrossEntropyLoss()
@@ -95,32 +93,25 @@ criterion = torch.nn.CrossEntropyLoss()
 optimizer = optim.SGD(net.parameters(), lr=0.01, momentum=0.9)
 
 # Training loop
-num_epochs = 10000  # You can adjust this based on your needs
+num_epochs = 1000  # You can adjust this based on your needs
 
-net.to(device)  # Move the network to the GPU
+  # Move the network to the GPU
 
 for epoch in range(num_epochs):
-    running_loss = 0.0
-    for i, data in enumerate(trainloader, 0):
-        inputs, labels = data
-        inputs, labels = inputs.to(device), labels.long().to(device)
 
-        # Zero the parameter gradients
-        optimizer.zero_grad()
+    output = net(X_train)
+    loss = criterion(output, y_train)
 
-        # Forward + backward + optimize
-        outputs = net(inputs)
-        loss = criterion(outputs, labels)
-        loss.backward()
-        optimizer.step()
-
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
     # Print statistics
     if epoch % 10 == 9:  # Print every 10 mini-batches
         print(f'epoch:{epoch}:{loss.item()}')
 
-output = net(x_test.to(device))
+output = net(X_test.to(device))
 print(output.shape)
 acc = np.sum(np.equal(np.argmax(output.cpu().data.numpy(), axis=-1), y_test.cpu().data.numpy()))
-print(acc / len(x_test))
+print(acc / len(X_test))
 
 

@@ -5,6 +5,8 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 from ucimlrepo import fetch_ucirepo
 from torch.utils.data import Dataset
 from torchvision import datasets, transforms
@@ -102,6 +104,7 @@ def get_dataset(dataset, data_path):
 
         dst_test = TensorDataset(images_val, labels_val)  # no augmentation
 
+    # TODO：可以尝试
     elif dataset == 'BEAN':
         style = 'csv'
         channel = 1
@@ -135,7 +138,7 @@ def get_dataset(dataset, data_path):
         dst_train = TensorDataset(x_train, y_train)
         dst_test = TensorDataset(x_test, y_test)
 
-    elif dataset == 'Breast':
+    elif dataset == 'WDBC':
         style = 'csv'
         channel = 1
         im_size = (1, 30)
@@ -143,28 +146,27 @@ def get_dataset(dataset, data_path):
         class_names = None
         mean = None
         std = None
-        # fetch dataset
+        # 加载WDBC数据集
         breast_cancer_wisconsin_diagnostic = fetch_ucirepo(id=17)
-
         # data (as pandas dataframes)
-        x = breast_cancer_wisconsin_diagnostic.data.features
+        X = breast_cancer_wisconsin_diagnostic.data.features.values
         y = breast_cancer_wisconsin_diagnostic.data.targets
         y = y.replace({'M': 0, 'B': 1})
-        x = torch.tensor(x.values)
-        y = torch.tensor(y.values).squeeze()
-        random_indices = torch.randperm(len(x))
-        x = x[random_indices]
-        y = y[random_indices]
-        y_train = y[:-69]
-        y_test = y[-69:]
-        x_train = x[:-69]
-        x_test = x[-69:]
-        x_train = F.normalize(x_train, p=2, dim=0)
-        x_test = F.normalize(x_test, p=2, dim=0)
-        print(x_train.shape)
+        y = y.values
+        # 数据预处理：标准化
+        scaler = StandardScaler()
+        X = scaler.fit_transform(X)
+        # 划分数据集
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=42)
+        # 转换为PyTorch的张量
+        X_train = torch.FloatTensor(X_train)
+        y_train = torch.LongTensor(y_train.squeeze())
+        X_test = torch.FloatTensor(X_test)
+        y_test = torch.LongTensor(y_test.squeeze())
+        print(X_train.shape)
         print(y_train.shape)
-        dst_train = TensorDataset(x_train, y_train)
-        dst_test = TensorDataset(x_test, y_test)
+        dst_train = TensorDataset(X_train, y_train)
+        dst_test = TensorDataset(X_test, y_test)
 
     # OK
     elif dataset == 'MIMIC':
@@ -176,16 +178,19 @@ def get_dataset(dataset, data_path):
         mean = None
         std = None
         data_path = os.path.join(data_path, 'mimic')
-        x_train = F.normalize(torch.tensor(np.load(os.path.join(data_path, "x_train.npy"))), p=2, dim=0)
-        x_test = F.normalize(torch.tensor(np.load(os.path.join(data_path, "x_test.npy"))), p=2, dim=0)
-        # x_train = torch.tensor(np.load(os.path.join(data_path, "x_train.npy")))
-        # x_test = torch.tensor(np.load(os.path.join(data_path, "x_test.npy")))
-        y_train = torch.tensor(np.load(os.path.join(data_path, "y_train.npy")))
-        y_test = torch.tensor(np.load(os.path.join(data_path, "y_test.npy")))
-        print(x_train.shape)
+        # x_train = F.normalize(torch.tensor(np.load(os.path.join(data_path, "x_train.npy"))), p=2, dim=0)
+        # x_test = F.normalize(torch.tensor(np.load(os.path.join(data_path, "x_test.npy"))), p=2, dim=0)
+        scaler = StandardScaler()
+        X_train = scaler.fit_transform(np.load(os.path.join(data_path, "x_train.npy")))
+        X_test = scaler.fit_transform(np.load(os.path.join(data_path, "x_test.npy")))
+        y_train = torch.LongTensor(np.load(os.path.join(data_path, "y_train.npy")))
+        y_test = torch.LongTensor(np.load(os.path.join(data_path, "y_test.npy")))
+        X_train = torch.FloatTensor(X_train)
+        X_test = torch.FloatTensor(X_test)
+        print(X_train.shape)
         print(y_train.shape)
-        dst_train = TensorDataset(x_train, y_train)
-        dst_test = TensorDataset(x_test, y_test)
+        dst_train = TensorDataset(X_train, y_train)
+        dst_test = TensorDataset(X_test, y_test)
 
     # OK
     elif dataset == 'Spambase':
@@ -198,26 +203,23 @@ def get_dataset(dataset, data_path):
         std = None
         spambase = fetch_ucirepo(id=94)
 
-        # data (as pandas dataframes)
-        x = spambase.data.features
+        X = spambase.data.features
         y = spambase.data.targets
-        x = torch.tensor(x.values)
-        y = torch.tensor(y.values).squeeze()
-        random_indices = torch.randperm(len(x))
-        x = x[random_indices]
-        y = y[random_indices]
-        y_train = y[:-300]
-        y_test = y[-300:]
-        x_train = x[:-300]
-        x_test = x[-300:]
-        # x_train = F.normalize(x[:-2000], p=1, dim=0)
-        # x_test = F.normalize(x[-2000:], p=1, dim=0)
-        x_train = F.normalize(x_train, p=2, dim=0)
-        x_test = F.normalize(x_test, p=2, dim=0)
-        print(x_train.shape)
+        X = torch.tensor(X.values)
+        y = torch.LongTensor(y.values).squeeze()
+        scaler = StandardScaler()
+        X = scaler.fit_transform(X)
+
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=42)
+
+        X_train = torch.FloatTensor(X_train)
+        y_train = torch.LongTensor(y_train.squeeze())
+        X_test = torch.FloatTensor(X_test)
+        y_test = torch.LongTensor(y_test.squeeze())
+        print(X_train.shape)
         print(y_train.shape)
-        dst_train = TensorDataset(x_train, y_train)
-        dst_test = TensorDataset(x_test, y_test)
+        dst_train = TensorDataset(X_train, y_train)
+        dst_test = TensorDataset(X_test, y_test)
 
     # just so so
     elif dataset == 'CUSTOMER':
@@ -233,20 +235,22 @@ def get_dataset(dataset, data_path):
         data = pd.read_csv(data_path)
         columes_to_drop = ['ID_code', 'target']
 
-        x = data.drop(columns=columes_to_drop, axis=1)
+        X = data.drop(columns=columes_to_drop, axis=1)
         y = data.iloc[:,1]
-        x_train = x.iloc[:len(data) - 10000]
-        x_test = x.iloc[-10000:]
-        y_train = torch.tensor(y.iloc[:len(data) - 10000].values)
-        y_test = torch.tensor(y.iloc[-10000:].values)
-        # x_train = F.normalize(torch.tensor(x_train.values), p=2, dim=0).float()
-        # x_test = F.normalize(torch.tensor(x_test.values), p=2, dim=0).float()
-        x_train = torch.tensor(x_train.values).float()
-        x_test = torch.tensor(x_test.values).float()
-        print(x_train.shape)
+        scaler = StandardScaler()
+        X = scaler.fit_transform(X)
+
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=42)
+
+        X_train = torch.FloatTensor(X_train)
+        y_train = torch.LongTensor(y_train.squeeze())
+        X_test = torch.FloatTensor(X_test)
+        y_test = torch.LongTensor(y_test.squeeze())
+
+        print(X_train.shape)
         print(y_train.shape)
-        dst_train = TensorDataset(x_train, y_train)
-        dst_test = TensorDataset(x_test, y_test)
+        dst_train = TensorDataset(X_train, y_train)
+        dst_test = TensorDataset(X_test, y_test)
 
     elif dataset == 'MAGIC':
         style = 'csv'
@@ -259,24 +263,25 @@ def get_dataset(dataset, data_path):
         # fetch dataset
         magic = fetch_ucirepo(id=159)
         # data (as pandas dataframes)
-        x = magic.data.features
+        X = magic.data.features
         y = magic.data.targets
         y = y.replace({'g':0, 'h':1})
-        x = torch.tensor(x.values)
-        y = torch.tensor(y.values).squeeze()
-        random_indices = torch.randperm(len(x))
-        x = x[random_indices]
-        y = y[random_indices]
-        y_train = y[:-2000]
-        y_test = y[-2000:]
-        x_train = x[:-2000]
-        x_test = x[-2000:]
-        x_train = F.normalize(x_train, p=2, dim=0)
-        x_test = F.normalize(x_test, p=2, dim=0)
-        print(x_train.shape)
+        y = y.values
+        # 数据预处理：标准化
+        scaler = StandardScaler()
+        X = scaler.fit_transform(X)
+        # 划分数据集
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=42)
+        # 转换为PyTorch的张量
+        X_train = torch.FloatTensor(X_train)
+        y_train = torch.LongTensor(y_train.squeeze())
+        X_test = torch.FloatTensor(X_test)
+        y_test = torch.LongTensor(y_test.squeeze())
+        print(X_train.shape)
         print(y_train.shape)
-        dst_train = TensorDataset(x_train, y_train)
-        dst_test = TensorDataset(x_test, y_test)
+        dst_train = TensorDataset(X_train, y_train)
+        dst_test = TensorDataset(X_test, y_test)
+
 
     else:
         exit('unknown dataset: %s'%dataset)
@@ -451,6 +456,7 @@ def evaluate_synset(it_eval, net, images_train, labels_train, testloader, args):
     trainloader = torch.utils.data.DataLoader(dst_train, batch_size=args.batch_train, shuffle=True, num_workers=0)
 
     start = time.time()
+
     for ep in range(Epoch+1):
         loss_train, acc_train = epoch('train', trainloader, net, optimizer, criterion, args, aug = args.dsa)
         if ep in lr_schedule:

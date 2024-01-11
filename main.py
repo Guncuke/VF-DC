@@ -14,7 +14,7 @@ def main():
     parser = argparse.ArgumentParser(description='Parameter Processing')
     parser.add_argument('--dataset', type=str, default='MIMIC', help='dataset')
     parser.add_argument('--model', type=str, default='MLP', help='model')
-    parser.add_argument('--ipc', type=int, default=100, help='sample(s) per class')
+    parser.add_argument('--ipc', type=int, default=50, help='sample(s) per class')
     parser.add_argument('--eval_mode', type=str, default='SS', help='eval_mode') # S: the same to training model, M: multi architectures,  W: net width, D: net depth, A: activation function, P: pooling layer, N: normalization layer,
     parser.add_argument('--num_exp', type=int, default=1, help='the number of experiments')
     parser.add_argument('--num_eval', type=int, default=20, help='the number of evaluating randomly initialized models')
@@ -28,10 +28,10 @@ def main():
     parser.add_argument('--data_path', type=str, default='data', help='dataset path')
     parser.add_argument('--save_path', type=str, default='result', help='path to save results')
     parser.add_argument('--gpu_num', type=int, default=1, help='use witch card')
-    parser.add_argument('--encrypt', type=bool, default=True, help='encryption or not')
+    parser.add_argument('--encrypt', type=bool, default=False, help='encryption or not')
     parser.add_argument('--bits', type=int, default=32, help='secret sharing bits')
-    parser.add_argument('--noise', type=bool, default=True, help='Gauss noise')
-    parser.add_argument('--noise_scale', type=float, default=1, help='see in paper')
+    parser.add_argument('--noise', type=bool, default=False, help='Gauss noise')
+    parser.add_argument('--noise_scale', type=float, default=10, help='see in paper')
 
     args = parser.parse_args()
     args.method = 'DM'
@@ -51,7 +51,7 @@ def main():
     print('eval_it_pool: ', eval_it_pool)
     style, channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader = get_dataset(args.dataset, args.data_path)
     model_eval_pool = get_eval_pool(args.eval_mode, args.model, args.model)
-
+    args.style = style
     args.dsa = False if args.dsa_strategy in ['none', 'None'] or style!='image' else True
 
     accs_all_exps = dict() # record performances of all experiments
@@ -88,13 +88,13 @@ def main():
                                  dtype=torch.long, requires_grad=False, device=args.device).view(
             -1)  # [0,0,0, 1,1,1, ..., 9,9,9]        # p1持有特征和生成数据集，p0持有标签
         ''' training '''
-        optimizer_img = torch.optim.SGD([image_syn, ], lr=args.lr_img, momentum=0.5) # optimizer_img for synthetic data
-        optimizer_img.zero_grad()
+        optimizer_smp = torch.optim.SGD([image_syn, ], lr=args.lr_img, momentum=0.5)
+        optimizer_smp.zero_grad()
         print('%s training begins'%get_time())
         acc_std = []
         for it in range(args.Iteration+1):
             ''' Evaluate synthetic data '''
-            if it in eval_it_pool[10:]:
+            if it in eval_it_pool[:]:
                 for model_eval in model_eval_pool:
                     print('-------------------------\nEvaluation\nmodel_train = %s, model_eval = %s, iteration = %d'%(args.model, model_eval, it))
 
@@ -208,9 +208,10 @@ def main():
                 if args.noise:
                     d = torch.tensor(output_real.shape[1], dtype=torch.float)
                     delta = torch.tensor(0.001, dtype=torch.float)
-                    n = torch.tensor(args.batch_real, dtype=torch.float)
+                    n = torch.tensor(batch_size, dtype=torch.float)
                     epsilon = torch.tensor(args.noise_scale, dtype=torch.float)
-                    sigma = torch.sqrt(2*d*torch.log(1.25/delta))/(n*epsilon)
+                    # change this to test localdp and VFDC
+                    sigma = torch.sqrt(2*d*torch.log(1.25/delta))/(epsilon * n)
                     noise = torch.randn_like(output_real_classes_mean) * sigma
                     output_real_classes_mean += noise
 
@@ -260,11 +261,11 @@ def main():
                   p0 将梯度传给 p1, p1反向传播生成数据集
                 ===========================================
                 """
-                optimizer_img.zero_grad()
+                optimizer_smp.zero_grad()
                 loss.backward()
-                optimizer_img.step()
+                optimizer_smp.step()
 
-            print('%s iter = %05d, loss = %.8f' % (get_time(), it, loss.item()/batch_size))
+            print('%s iter = %05d, loss = %.15f' % (get_time(), it, loss.item()/batch_size))
 
 
 
@@ -277,7 +278,7 @@ def main():
     print('\n==================== Final Results ====================\n')
     for key in model_eval_pool:
         accs = accs_all_exps[key]
-        print('Run %d experiments, train on %s, evaluate %d random %s, mean  = %.2f%%  std = %.2f%%'%(args.num_exp, args.model, len(accs), key, np.mean(accs)*100, np.std(accs)*100))
+        print('Run %d experiments, train on %s, ipc = %d, evaluate %d random %s, mean  = %.2f%%  std = %.2f%%'%(args.num_exp, args.model, args.ipc, len(accs), key, np.mean(accs)*100, np.std(accs)*100))
 
 
 if __name__ == '__main__':

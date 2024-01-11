@@ -20,30 +20,25 @@ class MLP(nn.Module):
         input_size = 1
         for size in im_size:
             input_size *= size
+
         self.fc_1 = nn.Linear(input_size, 256)
+        self.relu = nn.ReLU()
         self.fc_2 = nn.Linear(256, 256)
         self.fc_3 = nn.Linear(256, num_classes)
-        self.init_weights()
-
-    def init_weights(self):
-        for layer in self.children():
-            if isinstance(layer, nn.Linear):
-                # 随机初始化权重
-                init.xavier_normal_(layer.weight)
-                # 随机初始化偏置
-                init.zeros_(layer.bias)
 
     def embed(self, x):
         out = x.view(x.size(0), -1)
         out = F.relu(self.fc_1(out))
         out = self.fc_2(out)
-        # out = self.fc_3(out)
+        out = self.fc_3(out)
         return out
 
     def forward(self, x):
         out = x.view(x.size(0), -1)
-        out = F.relu(self.fc_1(out))
-        out = F.relu(self.fc_2(out))
+        out = self.fc_1(out)
+        out = self.relu(out)
+        out = self.fc_2(out)
+        out = self.relu(out)
         out = self.fc_3(out)
         return out
 
