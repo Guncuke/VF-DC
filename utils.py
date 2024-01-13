@@ -104,7 +104,6 @@ def get_dataset(dataset, data_path):
 
         dst_test = TensorDataset(images_val, labels_val)  # no augmentation
 
-    # TODO：可以尝试
     elif dataset == 'BEAN':
         style = 'csv'
         channel = 1
@@ -168,7 +167,6 @@ def get_dataset(dataset, data_path):
         dst_train = TensorDataset(X_train, y_train)
         dst_test = TensorDataset(X_test, y_test)
 
-    # OK
     elif dataset == 'MIMIC':
         style = 'csv'
         channel = 1
@@ -192,7 +190,6 @@ def get_dataset(dataset, data_path):
         dst_train = TensorDataset(X_train, y_train)
         dst_test = TensorDataset(X_test, y_test)
 
-    # OK
     elif dataset == 'Spambase':
         style = 'csv'
         channel = 1
@@ -221,7 +218,6 @@ def get_dataset(dataset, data_path):
         dst_train = TensorDataset(X_train, y_train)
         dst_test = TensorDataset(X_test, y_test)
 
-    # just so so
     elif dataset == 'CUSTOMER':
         style = 'csv'
         channel = 1
