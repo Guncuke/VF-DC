@@ -48,8 +48,20 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.01)
 
 num_epochs = 5000
+acc = []
 for epoch in range(num_epochs):
+
+    # 在训练集上进行预测并计算准确率
+    model.eval()
+    # 在测试集上进行预测并计算准确率
+    test_outputs = model(X_test)
+    _, predictions = torch.max(test_outputs, 1)
+
+    test_accuracy = accuracy_score(y_test.cpu().numpy(), predictions.cpu().numpy())
+    print(f'Test Accuracy: {test_accuracy:.4f}')
+    acc.append(test_accuracy)
     # 前向传播
+    model.train()
     outputs = model(X_train)
     loss = criterion(outputs, y_train)
 
@@ -61,13 +73,4 @@ for epoch in range(num_epochs):
     if (epoch+1) % 10 == 0:
         print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}')
 
-
-# 在测试集上进行预测
-model.eval()
-with torch.no_grad():
-    test_outputs = model(X_test.to(device))
-    _, predictions = torch.max(test_outputs, 1)
-
-# 计算准确率
-accuracy = accuracy_score(y_test.cpu().numpy(), predictions.cpu().numpy())
-print(f'Test Accuracy: {accuracy:.4f}')
+print(acc)

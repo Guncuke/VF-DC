@@ -13,7 +13,7 @@ from utils import get_dataset, get_network, get_eval_pool, evaluate_synset, get_
 def main():
 
     parser = argparse.ArgumentParser(description='Parameter Processing')
-    parser.add_argument('--dataset', type=str, default='MIMIC', help='dataset')
+    parser.add_argument('--dataset', type=str, default='Spambase', help='dataset')
     parser.add_argument('--model', type=str, default='MLP', help='model')
     parser.add_argument('--ipc', type=int, default=10, help='sample(s) per class')
     parser.add_argument('--eval_mode', type=str, default='SS', help='eval_mode') # S: the same to training model, M: multi architectures,  W: net width, D: net depth, A: activation function, P: pooling layer, N: normalization layer,
@@ -31,7 +31,7 @@ def main():
     parser.add_argument('--gpu_num', type=int, default=1, help='use witch card')
     parser.add_argument('--encrypt', type=bool, default=False, help='encryption or not')
     parser.add_argument('--bits', type=int, default=32, help='secret sharing bits')
-    parser.add_argument('--noise', type=bool, default=True, help='Gauss noise')
+    parser.add_argument('--noise', type=bool, default=False, help='Gauss noise')
     parser.add_argument('--noise_scale', type=float, default=100, help='see in paper')
 
     args = parser.parse_args()
@@ -94,15 +94,15 @@ def main():
         corset test
         训练时注释掉
         '''
-        # indices = []
-        # label_syn = []
-        # for label, indice in enumerate(indices_class):
-        #     label_syn += [label] * args.ipc
-        #     indice = random.sample(indice, args.ipc)
-        #     indices += indice
-        #
-        # label_syn = torch.LongTensor(label_syn).to(args.device)
-        # image_syn = images_all[indices]
+        indices = []
+        label_syn = []
+        for label, indice in enumerate(indices_class):
+            label_syn += [label] * args.ipc
+            indice = random.sample(indice, args.ipc)
+            indices += indice
+
+        label_syn = torch.LongTensor(label_syn).to(args.device)
+        image_syn = images_all[indices]
 
         ''' training '''
         optimizer_smp = torch.optim.SGD([image_syn, ], lr=args.lr_img, momentum=0.5)
@@ -111,7 +111,7 @@ def main():
         acc_std = []
         for it in range(args.Iteration+1):
             ''' Evaluate synthetic data '''
-            if it in eval_it_pool[19:]:
+            if it in eval_it_pool[:]:
                 for model_eval in model_eval_pool:
                     print('-------------------------\nEvaluation\nmodel_train = %s, model_eval = %s, iteration = %d'%(args.model, model_eval, it))
 
