@@ -1,18 +1,14 @@
-import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score
 import numpy as np
 import os
 
-# 假设你有一个CSV文件，包含MIMIC-III数据，其中包含特征列和标签列
-# 这里只是一个示例，实际情况需要根据你的数据进行调整
+
 data_path = os.path.join('data', 'mimic')
-# x_train = F.normalize(torch.tensor(np.load(os.path.join(data_path, "x_train.npy"))), p=2, dim=0)
-# x_test = F.normalize(torch.tensor(np.load(os.path.join(data_path, "x_test.npy"))), p=2, dim=0)
+
 scaler = StandardScaler()
 device = 'cuda'
 X_train = scaler.fit_transform(np.load(os.path.join(data_path, "x_train.npy")))
@@ -22,12 +18,10 @@ y_test = torch.LongTensor(np.load(os.path.join(data_path, "y_test.npy"))).to(dev
 print(X_train.shape)
 print(y_train.shape)
 
-
-# 转换为PyTorch的张量
 X_train = torch.FloatTensor(X_train).to(device)
 X_test = torch.FloatTensor(X_test).to(device)
 
-# 定义神经网络模型
+
 class SimpleNN(nn.Module):
     def __init__(self, input_size):
         super(SimpleNN, self).__init__()

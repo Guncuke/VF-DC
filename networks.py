@@ -30,7 +30,7 @@ class MLP(nn.Module):
         out = x.view(x.size(0), -1)
         out = F.relu(self.fc_1(out))
         out = self.fc_2(out)
-        out = self.fc_3(out)
+        # out = self.fc_3(out)
         return out
 
     def forward(self, x):
@@ -39,6 +39,15 @@ class MLP(nn.Module):
         out = self.relu(out)
         out = self.fc_2(out)
         out = self.relu(out)
+
+        # d = 256
+        # delta = torch.tensor(0.001, dtype=torch.float)
+        # epsilon = torch.tensor(10, dtype=torch.float)
+        # sigma = torch.sqrt(2 * d * torch.log(1.25 / delta)) / epsilon
+        # noise = torch.randn(256) * sigma
+        # noise = noise.to('cuda:3')
+        # out += noise
+
         out = self.fc_3(out)
         return out
 
@@ -56,6 +65,15 @@ class ConvNet(nn.Module):
     def forward(self, x):
         out = self.features(x)
         out = out.reshape(out.size(0), -1)
+
+        # d = out.shape[1]
+        # delta = torch.tensor(0.001, dtype=torch.float)
+        # epsilon = torch.tensor(10, dtype=torch.float)
+        # sigma = torch.sqrt(2 * d * torch.log(1.25 / delta)) / epsilon
+        # noise = torch.randn(d) * sigma
+        # noise = noise.to('cuda:1')
+        # out += noise.detach()
+
         out = self.classifier(out)
         return out
 

@@ -5,6 +5,7 @@ import argparse
 import numpy as np
 import torch
 import pandas as pd
+import random
 from torchvision.utils import save_image
 from utils import get_dataset, get_network, get_eval_pool, evaluate_synset, get_time, DiffAugment, ParamDiffAug, quantize_and_dequantize
 
@@ -18,7 +19,7 @@ def main():
     parser.add_argument('--eval_mode', type=str, default='SS', help='eval_mode') # S: the same to training model, M: multi architectures,  W: net width, D: net depth, A: activation function, P: pooling layer, N: normalization layer,
     parser.add_argument('--num_exp', type=int, default=1, help='the number of experiments')
     parser.add_argument('--num_eval', type=int, default=20, help='the number of evaluating randomly initialized models')
-    parser.add_argument('--epoch_eval_train', type=int, default=2000, help='epochs to train a model with synthetic data') # it can be small for speeding up with little performance drop
+    parser.add_argument('--epoch_eval_train', type=int, default=1000, help='epochs to train a model with synthetic data') # it can be small for speeding up with little performance drop
     parser.add_argument('--Iteration', type=int, default=20000, help='training iterations')
     parser.add_argument('--lr_img', type=float, default=1, help='learning rate for updating synthetic datas')
     parser.add_argument('--lr_net', type=float, default=0.01, help='learning rate for updating network parameters')
@@ -30,8 +31,8 @@ def main():
     parser.add_argument('--gpu_num', type=int, default=1, help='use witch card')
     parser.add_argument('--encrypt', type=bool, default=False, help='encryption or not')
     parser.add_argument('--bits', type=int, default=32, help='secret sharing bits')
-    parser.add_argument('--noise', type=bool, default=False, help='Gauss noise')
-    parser.add_argument('--noise_scale', type=float, default=10, help='see in paper')
+    parser.add_argument('--noise', type=bool, default=True, help='Gauss noise')
+    parser.add_argument('--noise_scale', type=float, default=100, help='see in paper')
 
     args = parser.parse_args()
     args.method = 'DM'
@@ -87,6 +88,22 @@ def main():
         label_syn = torch.tensor(np.concatenate([np.ones(args.ipc, dtype=np.int64) * i for i in range(num_classes)]),
                                  dtype=torch.long, requires_grad=False, device=args.device).view(
             -1)  # [0,0,0, 1,1,1, ..., 9,9,9]        # p1持有特征和生成数据集，p0持有标签
+
+
+        '''
+        corset test
+        训练时注释掉
+        '''
+        # indices = []
+        # label_syn = []
+        # for label, indice in enumerate(indices_class):
+        #     label_syn += [label] * args.ipc
+        #     indice = random.sample(indice, args.ipc)
+        #     indices += indice
+        #
+        # label_syn = torch.LongTensor(label_syn).to(args.device)
+        # image_syn = images_all[indices]
+
         ''' training '''
         optimizer_smp = torch.optim.SGD([image_syn, ], lr=args.lr_img, momentum=0.5)
         optimizer_smp.zero_grad()
@@ -94,7 +111,7 @@ def main():
         acc_std = []
         for it in range(args.Iteration+1):
             ''' Evaluate synthetic data '''
-            if it in eval_it_pool[:]:
+            if it in eval_it_pool[19:]:
                 for model_eval in model_eval_pool:
                     print('-------------------------\nEvaluation\nmodel_train = %s, model_eval = %s, iteration = %d'%(args.model, model_eval, it))
 
