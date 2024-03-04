@@ -13,14 +13,14 @@ from utils import get_dataset, get_network, get_eval_pool, evaluate_synset, get_
 def main():
 
     parser = argparse.ArgumentParser(description='Parameter Processing')
-    parser.add_argument('--dataset', type=str, default='Spambase', help='dataset')
-    parser.add_argument('--model', type=str, default='MLP', help='model')
-    parser.add_argument('--ipc', type=int, default=50, help='sample(s) per class')
+    parser.add_argument('--dataset', type=str, default='FashionMNIST', help='dataset')
+    parser.add_argument('--model', type=str, default='ConvNet', help='model')
+    parser.add_argument('--ipc', type=int, default=10, help='sample(s) per class')
     parser.add_argument('--eval_mode', type=str, default='SS', help='eval_mode') # S: the same to training model, M: multi architectures,  W: net width, D: net depth, A: activation function, P: pooling layer, N: normalization layer,
     parser.add_argument('--num_exp', type=int, default=1, help='the number of experiments')
-    parser.add_argument('--num_eval', type=int, default=20, help='the number of evaluating randomly initialized models')
-    parser.add_argument('--epoch_eval_train', type=int, default=1000, help='epochs to train a model with synthetic data') # it can be small for speeding up with little performance drop
-    parser.add_argument('--Iteration', type=int, default=20000, help='training iterations')
+    parser.add_argument('--num_eval', type=int, default=10, help='the number of evaluating randomly initialized models')
+    parser.add_argument('--epoch_eval_train', type=int, default=2000, help='epochs to train a model with synthetic data') # it can be small for speeding up with little performance drop
+    parser.add_argument('--Iteration', type=int, default=200, help='training iterations')
     parser.add_argument('--lr_img', type=float, default=1, help='learning rate for updating synthetic datas')
     parser.add_argument('--lr_net', type=float, default=0.01, help='learning rate for updating network parameters')
     parser.add_argument('--batch_real', type=int, default=2048, help='batch size for real data')
@@ -28,11 +28,11 @@ def main():
     parser.add_argument('--dsa_strategy', type=str, default='color_crop_cutout_flip_scale_rotate', help='differentiable Siamese augmentation strategy')
     parser.add_argument('--data_path', type=str, default='data', help='dataset path')
     parser.add_argument('--save_path', type=str, default='result', help='path to save results')
-    parser.add_argument('--gpu_num', type=int, default=1, help='use witch card')
+    parser.add_argument('--gpu_num', type=int, default=2, help='use witch card')
     parser.add_argument('--encrypt', type=bool, default=False, help='encryption or not')
     parser.add_argument('--bits', type=int, default=32, help='secret sharing bits')
-    parser.add_argument('--noise', type=bool, default=False, help='Gauss noise')
-    parser.add_argument('--noise_scale', type=float, default=100, help='see in paper')
+    parser.add_argument('--noise', type=bool, default=True, help='Gauss noise')
+    parser.add_argument('--noise_scale', type=float, default=8, help='see in paper')
 
     args = parser.parse_args()
     args.method = 'DM'
@@ -48,7 +48,7 @@ def main():
     if not os.path.exists(args.save_path):
         os.mkdir(args.save_path)
 
-    eval_it_pool = np.arange(0, args.Iteration+1, 1000).tolist() if args.eval_mode == 'S' or args.eval_mode == 'SS' else [args.Iteration] # The list of iterations when we evaluate models and record results.
+    eval_it_pool = np.arange(0, args.Iteration+1, 5).tolist() if args.eval_mode == 'S' or args.eval_mode == 'SS' else [args.Iteration] # The list of iterations when we evaluate models and record results.
     print('eval_it_pool: ', eval_it_pool)
     style, channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader = get_dataset(args.dataset, args.data_path)
     model_eval_pool = get_eval_pool(args.eval_mode, args.model, args.model)
@@ -111,7 +111,7 @@ def main():
         acc_std = []
         for it in range(args.Iteration+1):
             ''' Evaluate synthetic data '''
-            if it in eval_it_pool[19:]:
+            if it in eval_it_pool[:]:
                 for model_eval in model_eval_pool:
                     print('-------------------------\nEvaluation\nmodel_train = %s, model_eval = %s, iteration = %d'%(args.model, model_eval, it))
 
@@ -121,6 +121,7 @@ def main():
                     accs = []
                     for it_eval in range(args.num_eval):
                         net_eval = get_network(model_eval, channel, num_classes, args.device, im_size).to(args.device) # get a random model
+                        print(net_eval)
                         image_syn_eval, label_syn_eval = copy.deepcopy(image_syn.detach()), copy.deepcopy(label_syn.detach()) # avoid any unaware modification
                         _, acc_train, acc_test = evaluate_synset(it_eval, net_eval, image_syn_eval, label_syn_eval, testloader, args)
                         accs.append(acc_test)
